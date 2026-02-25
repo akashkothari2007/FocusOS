@@ -26,7 +26,29 @@ Build strong backend architecture and real-world automation logic.
 
 ---
 
-## What We Will Add Later (V2+)
+## Start the Service
+
+Requirements:
+- Docker
+
+Run:
+docker compose up -d --build
+
+Services:
+- Backend: http://localhost:8000
+- PostgreSQL: localhost:5432
+
+View logs:
+docker compose logs -f backend
+docker compose logs -f db
+
+Test endpoints:
+curl http://localhost:8000/health
+curl http://localhost:8000/db
+
+---
+
+## What I Will Add Later (V2+)
 
 - Background task processing (async AI jobs)
 - Resume generation in LaTeX (tailored per job)

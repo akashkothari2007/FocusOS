@@ -1,0 +1,74 @@
+postgres shit
+
+docker exec -it focusos_db psql -U focusos -d focusos
+go into container focusos_db, user focusos, database focusos
+
+\dt -> list tables
+\q -> quit
+
+\d jobs or \d todos -> table structure
+
+SELECT * FROM table -> select everything
+DELETE FROM todos WHERE id = 2 -> delete 
+
+INSERT INTO table (key, key, key)
+VALUES (value, value, value) -> insert into table
+
+UPDATE table
+SET key = 'whatever'
+WHERE id = 1; -> update table
+
+SELECT * FROM table ORDER BY key DESC (default is ascending) -> order
+
+WHERE key = something (filters)
+
+SELECT COUNT(*) FROM table; -> count
+-----------------------------------------------
+SELECT columns
+FROM tablename
+WHERE condition
+ORDER BY column (desc for descending)
+LIMIT number;
+
+UPDATE tablename
+SET a=b
+WHERE c=d
+
+DELETE FROM tablename
+WHERE a=b
+
+ALTER TABLE tablename
+ADD COLUMN key type constraints 
+or
+DROP COLUMN key
+or
+RENAME COLUMN key TO key
+or 
+
+
+CREATE TABLE tablename (
+    key type constraints
+
+)
+type could be
+BIGSERIAL (auto increments)
+TEXT
+INT
+DATE 
+BIGINT (same as big serial just no auto increment)
+TIMESTAMPTZ
+JSONB
+
+constraints could be
+NOT NULL
+DEFAULT value
+PRIMARY key
+REFERENCES
+
+------------------------------------------
+def get_conn():
+    return connect(DATABASE_URL, row_factory=dict_row)
+connect to the the thing
+with get_conn() as conn
+and conn.cursor = cur
+and cur.execute(QUERY)
