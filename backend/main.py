@@ -1,5 +1,7 @@
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
+from typing import Optional, Literal
 import os
-from fastapi import FastAPI
 from psycopg import connect
 from psycopg.rows import dict_row
 
@@ -32,29 +34,85 @@ def db_check():
 
 @app.get("/jobs")
 def list_jobs():
+    query = """
+    SELECT
+      j.*,
+      a.match_score,
+      a.summary,
+      a.updated_at AS analysis_updated_at,
+      d.latest_doc_id AS tailored_doc_id
+    FROM jobs j
+    LEFT JOIN job_analysis a
+      ON a.job_id = j.id
+    LEFT JOIN (
+      SELECT job_id, MAX(id) AS latest_doc_id
+      FROM docs
+      WHERE kind = 'tailored'
+      GROUP BY job_id
+    ) d
+      ON d.job_id = j.id
+    ORDER BY j.created_at DESC;
+    """
+
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT * FROM jobs ORDER BY created_at DESC;")
-            return cur.fetchall()
-@app.get("/todos")
-def list_todos():
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT * FROM todos ORDER BY created_at DESC;")
+            cur.execute(query)
             return cur.fetchall()
 
-@app.post("/jobs")
-def create_job(job: dict):
+class JobCreate(BaseModel):
+    company: str
+    title: str
+    link: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = Field(default="saved")  # or "in progress" if that's your default
+
+@app.post("/jobs", status_code=201)
+def create_job(job: JobCreate):
+    query = """
+    INSERT INTO jobs (company, status, link, description, title)
+    VALUES (%s, COALESCE(%s, 'saved'),%s, %s, %s)
+    RETURNING *;
+    """
+
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """
-                INSERT INTO jobs (company, role, link, status, description)
-                VALUES (%s, %s, %s, COALESCE(%s, 'saved'), %s)
-                RETURNING *;
-                """,
-                (job.get("company"), job.get("role"), job.get("link"), job.get("status"), job.get("description"))
+                query,
+                (job.company, job.status, job.link, job.description, job.title),
             )
             created = cur.fetchone()
-        conn.commit()
-    return created
+            conn.commit()
+            return created
+
+class JobStatusUpdate(BaseModel):
+    status: Literal["saved", "in progress", "applied", "interview", "rejected"]
+
+@app.patch("/jobs/{job_id}")
+def update_job_status(job_id: int, payload: JobStatusUpdate):
+    query = """
+    UPDATE jobs
+    SET status = %s
+    WHERE id = %s
+    RETURNING *;
+    """
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (payload.status, job_id))
+            updated = cur.fetchone()
+            if not updated:
+                raise HTTPException(status_code=404, detail="Job not found")
+            conn.commit()
+            return updated
+
+
+@app.delete("/jobs/{job_id}", status_code=204)
+def delete_job(job_id: int):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM jobs WHERE id = %s RETURNING id;", (job_id,))
+            deleted = cur.fetchone()
+            if not deleted:
+                raise HTTPException(status_code=404, detail="Job not found")
+            conn.commit()
+            return
