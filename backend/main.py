@@ -4,6 +4,7 @@ from typing import Optional, Literal
 import os
 from psycopg import connect
 from psycopg.rows import dict_row
+from datetime import datetime
 
 app = FastAPI()
 
@@ -116,3 +117,34 @@ def delete_job(job_id: int):
                 raise HTTPException(status_code=404, detail="Job not found")
             conn.commit()
             return
+
+@app.get("/todos")
+def list_todos():
+    query = """
+    SELECT * FROM todos
+    WHERE status = 'todo'
+    ORDER BY due_date ASC:
+    """
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query)
+            return cur.fetchall()
+
+class TodoCreate(BaseModel):
+    title: str
+    notes: Optional[str] = None
+    due_date: Optional[datetime] = None
+
+@app.post("/todos", status_code=201)
+def create_todo(todo: TodoCreate):
+    query = """
+    INSERT INTO todos (title, notes, due_date)
+    VALUES (%s, %s, %s)
+    RETURNING *;
+    """
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (todo.title, todo.notes, todo.due_date))
+            created = cur.fetchone()
+            conn.commit()
+            return created
