@@ -1,0 +1,3 @@
+#ignore testfrontend folder completely
+
+**/testfrontend/
