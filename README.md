@@ -30,13 +30,17 @@ Build strong backend architecture and real-world automation logic.
 
 Requirements:
 - Docker
+- npm
 
 Run:
 docker compose up -d --build
+cd testfrontend (seperate for now will dockerize real frontend later)
+npm run dev
 
 Services:
 - Backend: http://localhost:8000
 - PostgreSQL: localhost:5432
+- Frontend: localhost:5173
 
 View logs:
 docker compose logs -f backend
