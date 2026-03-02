@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
 import Todos from './pages/Todos';
 import History from './pages/History';
+import Jobs from './pages/Jobs';
+import Docs from './pages/Docs';
 import SessionBar from './components/SessionBar';
 import './styles/app.css';
 
@@ -28,6 +30,18 @@ export default function App() {
           >
             History
           </NavLink>
+          <NavLink
+            to="/jobs"
+            className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+          >
+            Job Portal
+          </NavLink>
+          <NavLink
+            to="/docs"
+            className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+          >
+            Docs
+          </NavLink>
         </div>
       </nav>
 
@@ -45,6 +59,8 @@ export default function App() {
             }
           />
           <Route path="/history" element={<History />} />
+          <Route path="/jobs" element={<Jobs />} />
+          <Route path="/docs" element={<Docs />} />
         </Routes>
       </main>
 

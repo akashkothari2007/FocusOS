@@ -143,7 +143,6 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
                     "role": "user",
                     "content": (
                         f"Job Description:\n{job['description'] or ''}\n\n"
-                        f"Job Summary:\n{job['summary'] or ''}\n\n"
                         f"Resume (LaTeX source):\n{doc['content']}\n\n"
                         "Score how well this resume matches the job and extract the key "
                         "technical skills and requirements from the job description.\n"
@@ -195,6 +194,7 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
                     "content": (
                         f"Key job requirements / keywords: {', '.join(keywords)}\n\n"
                         f"Resume (LaTeX source):\n{doc['content']}\n\n"
+                        f"Job Description:\n{job['description'] or ''}\n\n"
                         "Provide specific, actionable suggestions to better tailor this resume "
                         "to the listed job keywords. Each suggestion should reference a concrete "
                         "change the candidate can make.\n"
