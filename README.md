@@ -66,11 +66,8 @@ Evolve into a personal AI system that manages applications, tasks, and decision-
 
 ---
 
-## Database
-Table todos:
-id, title, status (pending/done), description, subtasks {id, title, status}, created_at, due_date
-Table sessions:
-id, todo_id (reference), started_at, ended_at, seconds_spent, notes
+## Database Diagram
+
 [Link for DB](https://dbdiagram.io/d/69a1d6fea3f0aa31e155e8b0)
 
 ## Tech Stack
