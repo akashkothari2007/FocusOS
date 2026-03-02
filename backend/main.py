@@ -70,6 +70,7 @@ class EndSession(BaseModel):
 
 #-----Todos-----
 
+# get all todos either all or by status filtered
 @router.get("/todos")
 def get_todos(status: Optional[Literal["pending", "done"]] = None):
     with get_conn() as conn:
@@ -85,6 +86,7 @@ def get_todos(status: Optional[Literal["pending", "done"]] = None):
     return {"todos": rows}
 
 
+# create a new todo 
 @router.post("/todos", status_code=201)
 def create_todo(todo: CreateTodo):
     subtasks_json = json.dumps([s.model_dump() for s in todo.subtasks])  # serialize list → JSON string so can be stored in database
@@ -102,6 +104,7 @@ def create_todo(todo: CreateTodo):
     return row
 
 
+# update a todo
 @router.patch("/todos/{todo_id}")
 def update_todo(todo_id: int, updates: UpdateTodo):
     fields = updates.model_dump(exclude_none=True)  # drops any field that is None (SO ONLY UPDATES CHANGED FIELDS!!! very cool)
@@ -127,6 +130,7 @@ def update_todo(todo_id: int, updates: UpdateTodo):
     return row
 
 
+# delete a todo in case of error
 @router.delete("/todos/{todo_id}", status_code=204)
 def delete_todo(todo_id: int):
     with get_conn() as conn:
@@ -140,6 +144,7 @@ def delete_todo(todo_id: int):
 
 # ─── Sessions ─────────────────────────────────────────────────────────────────
 
+# get all sessions for a todo (indexed was created for this purpose)
 @router.get("/todos/{todo_id}/sessions")
 def get_sessions(todo_id: int):
     with get_conn() as conn:
@@ -157,6 +162,7 @@ def get_sessions(todo_id: int):
     return {"sessions": rows}
 
 
+# start a new session for a todo
 @router.post("/todos/{todo_id}/sessions/start", status_code=201)
 def start_session(todo_id: int):
     with get_conn() as conn:
@@ -182,6 +188,7 @@ def start_session(todo_id: int):
     return row
 
 
+# end a session for a todo
 @router.patch("/sessions/{session_id}/end")
 def end_session(session_id: int, body: EndSession):
     with get_conn() as conn:
