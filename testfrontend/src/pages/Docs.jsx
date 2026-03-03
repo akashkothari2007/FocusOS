@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 
 function formatDate(dt) {
@@ -17,10 +18,19 @@ export default function Docs() {
   const [form, setForm]           = useState(EMPTY_FORM);
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState(null);
+  const [searchParams]            = useSearchParams();
+  const highlightId               = searchParams.get('highlight') ? parseInt(searchParams.get('highlight')) : null;
+  const highlightRef              = useRef(null);
 
   useEffect(() => {
     api.getDocs().then((data) => setDocs(data.docs));
   }, []);
+
+  useEffect(() => {
+    if (highlightId && highlightRef.current) {
+      setTimeout(() => highlightRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+    }
+  }, [highlightId, docs.length]);
 
   function openCreate() {
     setEditingDoc(null);
@@ -131,8 +141,12 @@ export default function Docs() {
         {docs.map((doc) => (
           <div
             key={doc.id}
+            ref={doc.id === highlightId ? highlightRef : null}
             className="todo-card"
-            style={{ borderLeftColor: doc.is_primary ? '#6366f1' : '#e0e0e4' }}
+            style={{
+              borderLeftColor: doc.is_primary ? '#6366f1' : '#e0e0e4',
+              ...(doc.id === highlightId ? { background: '#f8f8ff', outline: '2px solid #6366f1', outlineOffset: '-1px' } : {}),
+            }}
           >
             <div className="todo-card-header" style={{ cursor: 'default' }}>
               <div style={{ flex: 1, minWidth: 0 }}>

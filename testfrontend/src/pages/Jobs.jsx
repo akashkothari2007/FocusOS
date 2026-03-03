@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api';
 
 const BORDER_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#14b8a6'];
@@ -31,6 +32,8 @@ function AnalysisIndicator({ status }) {
     return <span className="ai-status ai-status-pulse">✦ summarizing...</span>;
   if (status === 'analyzing')
     return <span className="ai-status ai-status-pulse">✦ analyzing...</span>;
+  if (status === 'generating_resume')
+    return <span className="ai-status ai-status-pulse">✦ generating resume...</span>;
   if (status === 'done')
     return <span className="ai-status ai-status-done">✓ analyzed</span>;
   if (status === 'error')
@@ -73,7 +76,7 @@ export default function Jobs() {
     api.getJobs().then((data) => {
       setJobs(data.jobs);
       data.jobs.forEach((j) => {
-        if (['summarizing', 'analyzing'].includes(j.analysis_status)) {
+        if (['summarizing', 'analyzing', 'generating_resume'].includes(j.analysis_status)) {
           startPolling(j.id);
         }
       });
@@ -96,7 +99,7 @@ export default function Jobs() {
           )
         );
         setJobDetails((prev) => ({ ...prev, [jobId]: detail }));
-        if (!['summarizing', 'analyzing'].includes(detail.analysis_status)) {
+        if (!['summarizing', 'analyzing', 'generating_resume'].includes(detail.analysis_status)) {
           clearInterval(pollingRef.current[jobId]);
           delete pollingRef.current[jobId];
         }
@@ -171,6 +174,21 @@ export default function Jobs() {
     }
     setSelectedDocId('');
     setAnalyzePickerId(jobId);
+  }
+
+  async function handleGenerateResume(jobId) {
+    setActionLoading((prev) => ({ ...prev, [`resume_${jobId}`]: true }));
+    try {
+      await api.generateResume(jobId);
+      setJobs((prev) =>
+        prev.map((j) => (j.id === jobId ? { ...j, analysis_status: 'generating_resume' } : j))
+      );
+      startPolling(jobId);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [`resume_${jobId}`]: false }));
+    }
   }
 
   async function handleRunAnalysis(jobId) {
@@ -268,7 +286,7 @@ export default function Jobs() {
           const isExpanded  = expandedIds.includes(job.id);
           const detail      = jobDetails[job.id];
           const ss          = STATUS_STYLE[job.status] || STATUS_STYLE.saved;
-          const isAiActive  = ['summarizing', 'analyzing'].includes(job.analysis_status);
+          const isAiActive  = ['summarizing', 'analyzing', 'generating_resume'].includes(job.analysis_status);
 
           return (
             <div
@@ -452,6 +470,45 @@ export default function Jobs() {
                       )
                     )}
                   </div>
+
+                  {/* Tailored resume section — visible once analysis exists */}
+                  {detail?.match_score != null && (
+                    <div style={{ borderTop: '1px solid #f0f0f2', paddingTop: 14 }}>
+                      <p style={{ fontSize: 11, fontWeight: 600, color: '#aaa', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Tailored Resume
+                      </p>
+
+                      {job.analysis_status === 'generating_resume' ? (
+                        <span className="ai-status ai-status-pulse">✦ generating resume...</span>
+                      ) : detail?.output_doc_id ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                          <Link
+                            to={`/docs?highlight=${detail.output_doc_id}`}
+                            style={{ fontSize: 13, color: '#6366f1', fontWeight: 500 }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            View Resume ↗
+                          </Link>
+                          <button
+                            className="btn"
+                            style={{ background: '#f5f5f7', color: '#555' }}
+                            disabled={actionLoading[`resume_${job.id}`]}
+                            onClick={() => handleGenerateResume(job.id)}
+                          >
+                            {actionLoading[`resume_${job.id}`] ? '...' : 'Regenerate'}
+                          </button>
+                        </div>
+                      ) : job.analysis_status === 'done' ? (
+                        <button
+                          className="btn btn-primary"
+                          disabled={actionLoading[`resume_${job.id}`]}
+                          onClick={() => handleGenerateResume(job.id)}
+                        >
+                          {actionLoading[`resume_${job.id}`] ? '...' : 'Generate Resume'}
+                        </button>
+                      ) : null}
+                    </div>
+                  )}
 
                   {/* Delete */}
                   <div className="todo-card-footer">

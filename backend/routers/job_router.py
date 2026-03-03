@@ -1,74 +1,13 @@
 import json
-import os
-from urllib.parse import urlparse, parse_qs
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from typing import Optional, Literal
-from openai import AzureOpenAI
+
 from db import get_conn
 from models.job_models import CreateJob, UpdateJob, AnalyzeJob
+from ai import chat_json, fmt_profile
+from prompts import summary_messages, step1_messages, step2_messages, resume_messages
 
 router = APIRouter(prefix="/api/v1")
-
-# ---------------------------------------------------------------------------
-# Azure OpenAI — lazy singleton so env vars are read at call time, not import
-# ---------------------------------------------------------------------------
-
-_az_client = None
-
-def _get_az() -> AzureOpenAI:
-    global _az_client
-    if _az_client is None:
-        # AZURE_FOUNDRY_ENDPOINT is the full deployment URL, e.g.:
-        #   https://<resource>.cognitiveservices.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
-        # AzureOpenAI client needs only the base URL + api_version separately.
-        full_url = os.environ["AZURE_FOUNDRY_ENDPOINT"]
-        parsed = urlparse(full_url)
-        base_endpoint = f"{parsed.scheme}://{parsed.netloc}"
-        api_version = parse_qs(parsed.query).get("api-version", ["2025-01-01-preview"])[0]
-        _az_client = AzureOpenAI(
-            azure_endpoint=base_endpoint,
-            api_key=os.environ["AZURE_FOUNDRY_API_KEY"],
-            api_version=api_version,
-        )
-    return _az_client
-
-MODEL = "gpt-4o"
-
-# ---------------------------------------------------------------------------
-# Retry helper
-# ---------------------------------------------------------------------------
-
-def _fmt_profile(profile) -> str:
-    """Render profile experiences + projects as plain text for prompt context."""
-    if not profile:
-        return ""
-    lines = []
-    for exp in profile.get("experiences") or []:
-        role    = exp.get("role", "")
-        company = exp.get("company", "")
-        date    = exp.get("date", "")
-        lines.append(f"Experience: {role} at {company} ({date})")
-        for bullet in exp.get("bullets") or []:
-            lines.append(f"  - {bullet}")
-    for proj in profile.get("projects") or []:
-        title = proj.get("title", "")
-        desc  = proj.get("description", "")
-        tech  = proj.get("tech", "")
-        lines.append(f"Project: {title}" + (f" [{tech}]" if tech else ""))
-        if desc:
-            lines.append(f"  {desc}")
-    return "\n".join(lines)
-
-
-def _retry(fn, retries: int = 2):
-    """Call fn(), retrying up to `retries` additional times on any exception."""
-    exc = None
-    for _ in range(retries + 1):
-        try:
-            return fn()
-        except Exception as e:
-            exc = e
-    raise exc
 
 # ---------------------------------------------------------------------------
 # Background tasks
@@ -76,33 +15,9 @@ def _retry(fn, retries: int = 2):
 
 def generate_summary(job_id: int, description: str) -> None:
     """Summarize a job description and patch jobs.summary + analysis_status."""
-    def _call():
-        resp = _get_az().chat.completions.create(
-            model=MODEL,
-            response_format={"type": "json_object"},
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a job description analyst. "
-                        "Always respond with valid JSON only."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        "Summarize the following job description in 3-4 concise bullet points "
-                        "as plain text (no markdown formatting).\n\n"
-                        f"Job Description:\n{description}\n\n"
-                        'Return JSON: {"summary": "<bullet points separated by newlines>"}'
-                    ),
-                },
-            ],
-        )
-        return json.loads(resp.choices[0].message.content)["summary"]
-
     try:
-        summary = _retry(_call)
+        data = chat_json(summary_messages(description))
+        summary = data["summary"]
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -130,7 +45,7 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
                 (job_id,),
             )
 
-    # Fetch required data — own connection per spec
+    # Fetch required data
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -150,45 +65,13 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
                 )
         return
 
-    # Build a plain-text summary of the candidate's profile so both prompts
-    # have full context beyond just the current LaTeX doc.
-    profile_ctx = _fmt_profile(profile)
+    profile_ctx = fmt_profile(profile)
 
     # --- Step 1: match_score + keywords ---
-    def _step1():
-        resp = _get_az().chat.completions.create(
-            model=MODEL,
-            response_format={"type": "json_object"},
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a strict, honest resume and job description analyzer. "
-                        "Score calibration: 0-30 = weak match, 31-55 = partial match, "
-                        "56-75 = decent match, 76-90 = strong match, 91-100 = near-perfect. "
-                        "Do not inflate scores. Be critical — most candidates score 35-65. "
-                        "Always respond with valid JSON only."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"Job Description:\n{job['description'] or ''}\n\n"
-                        f"Resume (LaTeX source):\n{doc['content']}\n\n"
-                        + (f"Candidate Profile (experiences & projects not yet on the resume):\n{profile_ctx}\n\n" if profile_ctx else "")
-                        + "Score how well this candidate genuinely matches the job. "
-                        "Penalise clearly missing requirements. Extract the key technical skills and "
-                        "requirements from the job description.\n"
-                        'Return JSON: {"match_score": <integer 0-100>, "keywords": [<string>, ...]}'
-                    ),
-                },
-            ],
-        )
-        data = json.loads(resp.choices[0].message.content)
-        return int(data["match_score"]), list(data["keywords"])
-
     try:
-        match_score, keywords = _retry(_step1)
+        data = chat_json(step1_messages(job["description"], doc["content"], profile_ctx))
+        match_score = int(data["match_score"])
+        keywords = list(data["keywords"])
     except Exception:
         with get_conn() as conn:
             with conn.cursor() as cur:
@@ -197,7 +80,7 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
                 )
         return  # Abort: step 1 is required
 
-    # Surface step-1 results immediately so frontend can show them
+    # Surface step-1 results immediately
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -210,45 +93,13 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
             )
 
     # --- Step 2: suggestions ---
-    def _step2():
-        resp = _get_az().chat.completions.create(
-            model=MODEL,
-            response_format={"type": "json_object"},
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a direct, honest resume coach. "
-                        "Only suggest changes grounded in what is actually in the resume or candidate profile. "
-                        "Never invent skills, tools, or experiences the candidate has not demonstrated. "
-                        "Always respond with valid JSON only."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"Job Keywords / Requirements: {', '.join(keywords)}\n\n"
-                        f"Job Description:\n{job['description'] or ''}\n\n"
-                        f"Resume (LaTeX source):\n{doc['content']}\n\n"
-                        + (f"Candidate Profile (experiences & projects not yet on the resume):\n{profile_ctx}\n\n" if profile_ctx else "")
-                        + "Suggest concrete edits to better tailor the resume to this job. "
-                        "Only reference skills, projects, and experiences that appear above — "
-                        "do not suggest adding anything the candidate has not already demonstrated. "
-                        "If a requirement is simply missing from the candidate's background, say so plainly rather than suggesting they add it.\n"
-                        'Return JSON: {"suggestions": [<string>, ...]}'
-                    ),
-                },
-            ],
-        )
-        return list(json.loads(resp.choices[0].message.content)["suggestions"])
-
     suggestions = []
     try:
-        suggestions = _retry(_step2)
+        data = chat_json(step2_messages(keywords, job["description"], doc["content"], profile_ctx))
+        suggestions = list(data["suggestions"])
     except Exception:
-        pass  # Step 2 failure is non-fatal — leave suggestions as []
+        pass  # Step 2 failure is non-fatal
 
-    # Patch step-2 results and mark done (same connection = one commit)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -306,7 +157,6 @@ def get_job(job_id: int):
 
 @router.post("/jobs", status_code=201)
 def create_job(job: CreateJob, bg: BackgroundTasks):
-    # Pre-set analysis_status so the returned row accurately reflects imminent bg work
     analysis_status = "summarizing" if job.description else "idle"
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -365,7 +215,6 @@ def analyze_job(job_id: int, body: AnalyzeJob, bg: BackgroundTasks):
             if not cur.fetchone():
                 raise HTTPException(status_code=404, detail="Job not found")
 
-            # Stub row returned immediately; run_analysis fills in real values
             cur.execute(
                 """
                 INSERT INTO job_analysis (job_id, input_doc_id, match_score, keywords, suggestions, updated_at)
@@ -399,6 +248,98 @@ def delete_analysis(job_id: int):
     return
 
 
+def generate_resume_bg(job_id: int) -> None:
+    """Generate a tailored LaTeX resume and save it as a new doc."""
+    try:
+        # Mark in-progress
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE jobs SET analysis_status = 'generating_resume' WHERE id = %s;",
+                    (job_id,),
+                )
+
+        # Fetch all required data
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT title, company, description FROM jobs WHERE id = %s;",
+                    (job_id,),
+                )
+                job = cur.fetchone()
+                cur.execute(
+                    "SELECT input_doc_id, keywords, suggestions FROM job_analysis WHERE job_id = %s;",
+                    (job_id,),
+                )
+                analysis = cur.fetchone()
+                cur.execute(
+                    "SELECT content FROM docs WHERE id = %s;",
+                    (analysis["input_doc_id"],),
+                )
+                doc = cur.fetchone()
+                cur.execute("SELECT projects, experiences FROM profile WHERE id = 1;")
+                profile = cur.fetchone()
+
+        profile_ctx = fmt_profile(profile)
+        keywords = analysis["keywords"] or []
+        suggestions = analysis["suggestions"] or []
+
+        data = chat_json(
+            resume_messages(
+                base_resume=doc["content"],
+                keywords=keywords,
+                suggestions=suggestions,
+                profile_ctx=profile_ctx,
+                job_description=job["description"] or "",
+            )
+        )
+        latex = data["resume"]
+
+        doc_title = f"{job['title']} @ {job['company']} \u2014 Tailored"
+
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO docs (title, content) VALUES (%s, %s) RETURNING id;",
+                    (doc_title, latex),
+                )
+                new_doc_id = cur.fetchone()["id"]
+                cur.execute(
+                    "UPDATE job_analysis SET output_doc_id = %s, updated_at = NOW() WHERE job_id = %s;",
+                    (new_doc_id, job_id),
+                )
+                cur.execute(
+                    "UPDATE jobs SET analysis_status = 'done' WHERE id = %s;",
+                    (job_id,),
+                )
+
+    except Exception as e:
+        print(f"RESUME ERROR job {job_id}: {type(e).__name__}: {e}", flush=True)
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE jobs SET analysis_status = 'error' WHERE id = %s;",
+                    (job_id,),
+                )
+
+
 @router.post("/jobs/{job_id}/generate-resume")
-def generate_resume(job_id: int):
-    return {"message": "not implemented yet"}
+def generate_resume(job_id: int, bg: BackgroundTasks):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT analysis_status FROM jobs WHERE id = %s;", (job_id,)
+            )
+            job = cur.fetchone()
+            if not job:
+                raise HTTPException(status_code=404, detail="Job not found")
+
+            cur.execute(
+                "SELECT input_doc_id FROM job_analysis WHERE job_id = %s;", (job_id,)
+            )
+            analysis = cur.fetchone()
+            if not analysis or not analysis["input_doc_id"]:
+                raise HTTPException(status_code=400, detail="No analysis found — run /analyze first")
+
+    bg.add_task(generate_resume_bg, job_id)
+    return {"message": "generating"}
