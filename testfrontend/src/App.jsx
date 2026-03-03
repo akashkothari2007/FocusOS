@@ -4,6 +4,7 @@ import Todos from './pages/Todos';
 import History from './pages/History';
 import Jobs from './pages/Jobs';
 import Docs from './pages/Docs';
+import Profile from './pages/Profile';
 import SessionBar from './components/SessionBar';
 import './styles/app.css';
 
@@ -42,6 +43,12 @@ export default function App() {
           >
             Docs
           </NavLink>
+          <NavLink
+            to="/profile"
+            className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+          >
+            Profile
+          </NavLink>
         </div>
       </nav>
 
@@ -61,6 +68,7 @@ export default function App() {
           <Route path="/history" element={<History />} />
           <Route path="/jobs" element={<Jobs />} />
           <Route path="/docs" element={<Docs />} />
+          <Route path="/profile" element={<Profile />} />
         </Routes>
       </main>
 

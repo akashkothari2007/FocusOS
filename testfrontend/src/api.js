@@ -78,4 +78,11 @@ export const api = {
 
   deleteDoc: (id) =>
     request(`/api/v1/docs/${id}`, { method: 'DELETE' }),
+
+  // Profile
+  getProfile: () =>
+    request('/api/v1/profile'),
+
+  updateProfile: (data) =>
+    request('/api/v1/profile', { method: 'PATCH', body: JSON.stringify(data) }),
 };

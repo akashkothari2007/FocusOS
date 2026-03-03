@@ -38,6 +38,28 @@ MODEL = "gpt-4o"
 # Retry helper
 # ---------------------------------------------------------------------------
 
+def _fmt_profile(profile) -> str:
+    """Render profile experiences + projects as plain text for prompt context."""
+    if not profile:
+        return ""
+    lines = []
+    for exp in profile.get("experiences") or []:
+        role    = exp.get("role", "")
+        company = exp.get("company", "")
+        date    = exp.get("date", "")
+        lines.append(f"Experience: {role} at {company} ({date})")
+        for bullet in exp.get("bullets") or []:
+            lines.append(f"  - {bullet}")
+    for proj in profile.get("projects") or []:
+        title = proj.get("title", "")
+        desc  = proj.get("description", "")
+        tech  = proj.get("tech", "")
+        lines.append(f"Project: {title}" + (f" [{tech}]" if tech else ""))
+        if desc:
+            lines.append(f"  {desc}")
+    return "\n".join(lines)
+
+
 def _retry(fn, retries: int = 2):
     """Call fn(), retrying up to `retries` additional times on any exception."""
     exc = None
@@ -117,6 +139,8 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
             job = cur.fetchone()
             cur.execute("SELECT content FROM docs WHERE id = %s;", (input_doc_id,))
             doc = cur.fetchone()
+            cur.execute("SELECT projects, experiences FROM profile WHERE id = 1;")
+            profile = cur.fetchone()
 
     if not job or not doc:
         with get_conn() as conn:
@@ -125,6 +149,10 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
                     "UPDATE jobs SET analysis_status = 'error' WHERE id = %s;", (job_id,)
                 )
         return
+
+    # Build a plain-text summary of the candidate's profile so both prompts
+    # have full context beyond just the current LaTeX doc.
+    profile_ctx = _fmt_profile(profile)
 
     # --- Step 1: match_score + keywords ---
     def _step1():
@@ -135,7 +163,10 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
                 {
                     "role": "system",
                     "content": (
-                        "You are an expert resume and job description analyzer. "
+                        "You are a strict, honest resume and job description analyzer. "
+                        "Score calibration: 0-30 = weak match, 31-55 = partial match, "
+                        "56-75 = decent match, 76-90 = strong match, 91-100 = near-perfect. "
+                        "Do not inflate scores. Be critical — most candidates score 35-65. "
                         "Always respond with valid JSON only."
                     ),
                 },
@@ -144,8 +175,10 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
                     "content": (
                         f"Job Description:\n{job['description'] or ''}\n\n"
                         f"Resume (LaTeX source):\n{doc['content']}\n\n"
-                        "Score how well this resume matches the job and extract the key "
-                        "technical skills and requirements from the job description.\n"
+                        + (f"Candidate Profile (experiences & projects not yet on the resume):\n{profile_ctx}\n\n" if profile_ctx else "")
+                        + "Score how well this candidate genuinely matches the job. "
+                        "Penalise clearly missing requirements. Extract the key technical skills and "
+                        "requirements from the job description.\n"
                         'Return JSON: {"match_score": <integer 0-100>, "keywords": [<string>, ...]}'
                     ),
                 },
@@ -185,19 +218,23 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
                 {
                     "role": "system",
                     "content": (
-                        "You are an expert resume coach. "
+                        "You are a direct, honest resume coach. "
+                        "Only suggest changes grounded in what is actually in the resume or candidate profile. "
+                        "Never invent skills, tools, or experiences the candidate has not demonstrated. "
                         "Always respond with valid JSON only."
                     ),
                 },
                 {
                     "role": "user",
                     "content": (
-                        f"Key job requirements / keywords: {', '.join(keywords)}\n\n"
-                        f"Resume (LaTeX source):\n{doc['content']}\n\n"
+                        f"Job Keywords / Requirements: {', '.join(keywords)}\n\n"
                         f"Job Description:\n{job['description'] or ''}\n\n"
-                        "Provide specific, actionable suggestions to better tailor this resume "
-                        "to the listed job keywords. Each suggestion should reference a concrete "
-                        "change the candidate can make.\n"
+                        f"Resume (LaTeX source):\n{doc['content']}\n\n"
+                        + (f"Candidate Profile (experiences & projects not yet on the resume):\n{profile_ctx}\n\n" if profile_ctx else "")
+                        + "Suggest concrete edits to better tailor the resume to this job. "
+                        "Only reference skills, projects, and experiences that appear above — "
+                        "do not suggest adding anything the candidate has not already demonstrated. "
+                        "If a requirement is simply missing from the candidate's background, say so plainly rather than suggesting they add it.\n"
                         'Return JSON: {"suggestions": [<string>, ...]}'
                     ),
                 },
