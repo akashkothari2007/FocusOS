@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from typing import Optional, Literal
 
 from db import get_conn
-from models.job_models import CreateJob, UpdateJob, AnalyzeJob
+from models.job_models import CreateJob, UpdateJob, AnalyzeJob, GenerateResumeBody
 from ai import chat_json
 from latex_handler import fmt_profile, parse_latex
 from prompts import summary_messages, analysis_messages, resume_messages
@@ -78,11 +78,16 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
     parsed = parse_latex(doc["content"])
     log.info(f"  Parsed       : {len(parsed['experiences'])} experiences, {len(parsed['projects'])} projects")
 
-    # Only pass profile projects NOT already on the resume
+    # Pass profile items NOT already on the resume (both projects and experiences)
     resume_titles = {p.title for p in parsed["projects"]}
-    extra = [p for p in (profile.get("projects") or []) if p.get("title") not in resume_titles]
-    extra_ctx = fmt_profile({"projects": extra, "experiences": []})
-    log.info(f"  Extra profile projects for swap: {len(extra)}")
+    resume_exp_keys = {(e.role.lower(), e.company.lower()) for e in parsed["experiences"]}
+    extra_projs = [p for p in (profile.get("projects") or []) if p.get("title") not in resume_titles]
+    extra_exps = [
+        e for e in (profile.get("experiences") or [])
+        if (e.get("role", "").lower(), e.get("company", "").lower()) not in resume_exp_keys
+    ]
+    extra_ctx = fmt_profile({"projects": extra_projs, "experiences": extra_exps})
+    log.info(f"  Extra for swap: {len(extra_projs)} projects, {len(extra_exps)} experiences")
 
     # --- Step 2: structured suggestions ---
     log.info("")
@@ -96,11 +101,12 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
             parsed=parsed,
             profile_ctx=extra_ctx,
             n_projects=len(parsed["projects"]),
+            n_experiences=len(parsed["experiences"]),
         ))
         match_score = int(data["match_score"])
         suggestions = {k: v for k, v in data.items() if k != "match_score"}
-        log.info(f"  Match score  : {match_score}/100")
-        log.info(f"  experience_notes: {len(suggestions.get('experience_notes', []))}")
+        log.info(f"  Match score     : {match_score}/100")
+        log.info(f"  experience_plan : {len(suggestions.get('experience_plan', []))}")
         log.info(f"  project_plan    : {len(suggestions.get('project_plan', []))}")
     except Exception as e:
         log.error(f"  ERROR in step 2 (non-fatal): {type(e).__name__}: {e}", exc_info=True)
@@ -124,7 +130,7 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
     log.info(f"  DONE — analysis complete for job {job_id}")
     log.info(SEP)
 
-def generate_resume_bg(job_id: int) -> None:
+def generate_resume_bg(job_id: int, plan_overrides: dict | None = None) -> None:
     log.info(SEP)
     log.info(f"  GENERATE RESUME  job_id={job_id}")
     log.info(SEP)
@@ -173,21 +179,59 @@ def generate_resume_bg(job_id: int) -> None:
 
         # Backward compat: old suggestions stored as flat list
         if isinstance(suggestions_raw, list):
-            log.info("  [compat] old flat suggestions — using keep-all project plan with no notes")
+            log.info("  [compat] old flat suggestions — keep-all plan, no notes")
             project_plan = [{"action": "keep", "title": p.title, "notes": []} for p in parsed["projects"]]
-            suggestions_dict = {"experience_notes": [], "project_plan": project_plan}
+            suggestions_dict = {"experience_plan": [], "project_plan": project_plan}
             new_profile_projects = []
+            new_profile_experiences = []
+            experience_plan = []
         else:
             suggestions_dict = suggestions_raw
             project_plan = suggestions_dict.get("project_plan", [])
-            swap_titles = {s["add"].lower() for s in project_plan if s.get("action") == "swap"}
+            experience_plan = suggestions_dict.get("experience_plan", [])
+
+            # Profile projects being swapped in
+            swap_proj_titles = {s["add"].lower() for s in project_plan if s.get("action") == "swap"}
             new_profile_projects = [
-                p for p in (profile.get("projects") or []) if p.get("title", "").lower() in swap_titles
+                p for p in (profile.get("projects") or []) if p.get("title", "").lower() in swap_proj_titles
             ]
 
-        log.info(f"  Keywords    : {len(keywords)}")
-        log.info(f"  project_plan: {len(project_plan)} entries  (swaps: {sum(1 for p in project_plan if p.get('action') == 'swap')})")
-        log.info(f"  swap-in projects: {[p.get('title') for p in new_profile_projects]}")
+            # Profile experiences being swapped in
+            swap_exp_roles = {s["add_role"].lower() for s in experience_plan if s.get("action") == "swap"}
+            new_profile_experiences = [
+                e for e in (profile.get("experiences") or []) if e.get("role", "").lower() in swap_exp_roles
+            ]
+
+            # Enrich experience_plan swap entries with date/location for inject_changes
+            prof_exp_lookup = {e.get("role", "").lower(): e for e in (profile.get("experiences") or [])}
+            for plan_item in experience_plan:
+                if plan_item.get("action") == "swap":
+                    prof_exp = prof_exp_lookup.get(plan_item.get("add_role", "").lower(), {})
+                    plan_item.setdefault("add_date", prof_exp.get("date", ""))
+                    plan_item.setdefault("add_location", prof_exp.get("location", ""))
+
+        # Apply user plan overrides (frontend can deselect swaps)
+        if plan_overrides:
+            if plan_overrides.get("project_plan") is not None:
+                project_plan = plan_overrides["project_plan"]
+                log.info("  [override] project_plan from frontend")
+            if plan_overrides.get("experience_plan") is not None:
+                experience_plan = plan_overrides["experience_plan"]
+                log.info("  [override] experience_plan from frontend")
+
+            # Re-enrich any remaining swap entries after override
+            prof_exp_lookup = {e.get("role", "").lower(): e for e in (profile.get("experiences") or [])}
+            for plan_item in experience_plan:
+                if plan_item.get("action") == "swap":
+                    prof_exp = prof_exp_lookup.get(plan_item.get("add_role", "").lower(), {})
+                    plan_item.setdefault("add_date", prof_exp.get("date", ""))
+                    plan_item.setdefault("add_location", prof_exp.get("location", ""))
+
+        proj_swaps = sum(1 for p in project_plan if p.get("action") == "swap")
+        exp_swaps  = sum(1 for e in experience_plan if e.get("action") == "swap")
+        log.info(f"  Keywords       : {len(keywords)}")
+        log.info(f"  project_plan   : {len(project_plan)} entries  ({proj_swaps} swaps)")
+        log.info(f"  experience_plan: {len(experience_plan)} entries  ({exp_swaps} swaps)")
         log.info("")
         log.info("  Calling AI for bullet rewrites (no LaTeX in/out)...")
 
@@ -197,12 +241,13 @@ def generate_resume_bg(job_id: int) -> None:
                 parsed=parsed,
                 suggestions=suggestions_dict,
                 new_profile_projects=new_profile_projects,
+                new_profile_experiences=new_profile_experiences,
             )
         )
         log.info(f"  AI output   : {len(data.get('experiences', []))} exp, {len(data.get('projects', []))} proj")
 
         log.info("  Injecting changes into base LaTeX...")
-        latex = inject_changes(doc["content"], data, project_plan)
+        latex = inject_changes(doc["content"], data, project_plan, experience_plan)
         log.info(f"  LaTeX final : {len(latex)} chars")
 
         doc_title = f"{job['title']} @ {job['company']} \u2014 Tailored"
@@ -373,7 +418,7 @@ def delete_analysis(job_id: int):
 
 
 @router.post("/jobs/{job_id}/generate-resume")
-def generate_resume(job_id: int, bg: BackgroundTasks):
+def generate_resume(job_id: int, bg: BackgroundTasks, body: GenerateResumeBody = GenerateResumeBody()):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT analysis_status FROM jobs WHERE id = %s;", (job_id,))
@@ -386,5 +431,6 @@ def generate_resume(job_id: int, bg: BackgroundTasks):
             if not analysis or not analysis["input_doc_id"]:
                 raise HTTPException(status_code=400, detail="No analysis found — run /analyze first")
 
-    bg.add_task(generate_resume_bg, job_id)
+    overrides = body.model_dump(exclude_none=True) or None
+    bg.add_task(generate_resume_bg, job_id, overrides)
     return {"message": "generating"}

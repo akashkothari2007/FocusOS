@@ -21,3 +21,8 @@ class UpdateJob(BaseModel):
 
 class AnalyzeJob(BaseModel):
     input_doc_id: int
+
+
+class GenerateResumeBody(BaseModel):
+    experience_plan: Optional[list] = None
+    project_plan: Optional[list] = None

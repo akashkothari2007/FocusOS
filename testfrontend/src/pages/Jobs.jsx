@@ -69,7 +69,45 @@ export default function Jobs() {
   const [analyzePickerId, setAnalyzePickerId] = useState(null);
   const [selectedDocId, setSelectedDocId]    = useState('');
   const [actionLoading, setActionLoading]    = useState({});
+  // planEdits[jobId] = { exp: { [idx]: bool }, proj: { [idx]: bool } }
+  // true = apply swap, false = revert to keep
+  const [planEdits, setPlanEdits]            = useState({});
   const pollingRef = useRef({});
+
+  function initPlanEdits(jobId, suggestions) {
+    if (!suggestions || Array.isArray(suggestions)) return;
+    setPlanEdits((prev) => {
+      if (prev[jobId]) return prev; // already initialized
+      const exp = {}, proj = {};
+      (suggestions.experience_plan || []).forEach((ep, idx) => { if (ep.action === 'swap') exp[idx] = true; });
+      (suggestions.project_plan    || []).forEach((pp, idx) => { if (pp.action === 'swap') proj[idx] = true; });
+      return { ...prev, [jobId]: { exp, proj } };
+    });
+  }
+
+  function togglePlanSwap(jobId, type, idx) {
+    setPlanEdits((prev) => {
+      const cur = prev[jobId] || { exp: {}, proj: {} };
+      const section = type === 'exp' ? cur.exp : cur.proj;
+      return { ...prev, [jobId]: { ...cur, [type]: { ...section, [idx]: !section[idx] } } };
+    });
+  }
+
+  function buildEffectivePlan(jobId, suggestions) {
+    if (!suggestions || Array.isArray(suggestions)) return {};
+    const edits = planEdits[jobId] || { exp: {}, proj: {} };
+    const experience_plan = (suggestions.experience_plan || []).map((ep, idx) =>
+      ep.action === 'swap' && edits.exp[idx] === false
+        ? { action: 'keep', role: ep.remove_role, company: ep.remove_company, notes: [] }
+        : ep
+    );
+    const project_plan = (suggestions.project_plan || []).map((pp, idx) =>
+      pp.action === 'swap' && edits.proj[idx] === false
+        ? { action: 'keep', title: pp.remove, notes: [] }
+        : pp
+    );
+    return { experience_plan, project_plan };
+  }
 
   // Initial load
   useEffect(() => {
@@ -99,6 +137,7 @@ export default function Jobs() {
           )
         );
         setJobDetails((prev) => ({ ...prev, [jobId]: detail }));
+        initPlanEdits(jobId, detail.suggestions);
         if (!['summarizing', 'analyzing', 'generating_resume'].includes(detail.analysis_status)) {
           clearInterval(pollingRef.current[jobId]);
           delete pollingRef.current[jobId];
@@ -118,6 +157,7 @@ export default function Jobs() {
       if (!jobDetails[jobId]) {
         const detail = await api.getJob(jobId);
         setJobDetails((prev) => ({ ...prev, [jobId]: detail }));
+        initPlanEdits(jobId, detail.suggestions);
       }
     }
   }
@@ -179,7 +219,9 @@ export default function Jobs() {
   async function handleGenerateResume(jobId) {
     setActionLoading((prev) => ({ ...prev, [`resume_${jobId}`]: true }));
     try {
-      await api.generateResume(jobId);
+      const detail = jobDetails[jobId];
+      const plan = buildEffectivePlan(jobId, detail?.suggestions);
+      await api.generateResume(jobId, plan);
       setJobs((prev) =>
         prev.map((j) => (j.id === jobId ? { ...j, analysis_status: 'generating_resume' } : j))
       );
@@ -205,6 +247,7 @@ export default function Jobs() {
         ...prev,
         [jobId]: { ...detail, analysis_status: 'analyzing' },
       }));
+      setPlanEdits((prev) => { const n = { ...prev }; delete n[jobId]; return n; });
       setAnalyzePickerId(null);
       startPolling(jobId);
     } catch (err) {
@@ -413,7 +456,11 @@ export default function Jobs() {
                         </div>
 
                         {detail.suggestions && (
-                          <SuggestionsPanel suggestions={detail.suggestions} />
+                          <SuggestionsPanel
+                            suggestions={detail.suggestions}
+                            edits={planEdits[job.id] || { exp: {}, proj: {} }}
+                            onToggle={(type, idx) => togglePlanSwap(job.id, type, idx)}
+                          />
                         )}
 
                         {/* Re-run (disabled while AI is active) */}
@@ -525,7 +572,7 @@ export default function Jobs() {
   );
 }
 
-function SuggestionsPanel({ suggestions }) {
+function SuggestionsPanel({ suggestions, edits = { exp: {}, proj: {} }, onToggle }) {
   // Backward compat: old flat array format
   if (Array.isArray(suggestions)) {
     if (suggestions.length === 0) return null;
@@ -541,8 +588,78 @@ function SuggestionsPanel({ suggestions }) {
     );
   }
 
-  const { overall, experience_notes = [], project_plan = [] } = suggestions;
-  if (!overall && experience_notes.length === 0 && project_plan.length === 0) return null;
+  const { overall, experience_plan, experience_notes = [], project_plan = [] } = suggestions;
+  const expPlan = experience_plan || (experience_notes.length > 0
+    ? experience_notes.map(en => ({ action: 'keep', role: en.role, company: en.company, notes: en.notes }))
+    : []);
+  if (!overall && expPlan.length === 0 && project_plan.length === 0) return null;
+
+  function PlanRow({ item, type, idx, isSwap, applied }) {
+    const toggled = isSwap && applied === false;
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'flex-start', gap: 10,
+        background: toggled ? '#f9f9f9' : '#fafafa',
+        border: `1px solid ${toggled ? '#e5e7eb' : '#f0f0f2'}`,
+        borderRadius: 8, padding: '7px 12px',
+        opacity: toggled ? 0.6 : 1,
+      }}>
+        {isSwap ? (
+          <button
+            onClick={() => onToggle?.(type, idx)}
+            title={applied === false ? 'Click to apply swap' : 'Click to skip swap'}
+            style={{
+              flexShrink: 0, marginTop: 1, fontSize: 10, fontWeight: 700,
+              padding: '2px 7px', borderRadius: 4, border: 'none', cursor: 'pointer',
+              background: applied === false ? '#f3f4f6' : '#fff7ed',
+              color: applied === false ? '#9ca3af' : '#c2410c',
+            }}
+          >
+            {applied === false ? 'SKIP' : 'SWAP'}
+          </button>
+        ) : (
+          <span style={{
+            fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4, flexShrink: 0, marginTop: 1,
+            background: '#f0fdf4', color: '#16a34a',
+          }}>
+            KEEP
+          </span>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {isSwap ? (
+            <p style={{ fontSize: 12, color: '#555' }}>
+              {type === 'exp' ? (
+                <>
+                  <span style={{ textDecoration: toggled ? 'none' : 'line-through', color: '#bbb' }}>{item.remove_role} @ {item.remove_company}</span>
+                  {!toggled && <>{' → '}<span style={{ fontWeight: 600, color: '#333' }}>{item.add_role} @ {item.add_company}</span></>}
+                  {toggled && <span style={{ color: '#6b7280', marginLeft: 6 }}>(keeping {item.remove_role})</span>}
+                </>
+              ) : (
+                <>
+                  <span style={{ textDecoration: toggled ? 'none' : 'line-through', color: '#bbb' }}>{item.remove}</span>
+                  {!toggled && <>{' → '}<span style={{ fontWeight: 600, color: '#333' }}>{item.add}</span></>}
+                  {toggled && <span style={{ color: '#6b7280', marginLeft: 6 }}>(keeping {item.remove})</span>}
+                </>
+              )}
+            </p>
+          ) : (
+            <p style={{ fontSize: 12, fontWeight: 500, color: '#333' }}>
+              {type === 'exp'
+                ? <>{item.role} <span style={{ fontWeight: 400, color: '#888' }}>@ {item.company}</span></>
+                : item.title}
+            </p>
+          )}
+          {item.notes?.length > 0 && (
+            <ul style={{ paddingLeft: 12, marginTop: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {item.notes.map((n, ni) => (
+                <li key={ni} style={{ fontSize: 11, color: '#777', lineHeight: 1.4 }}>{n}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -552,21 +669,13 @@ function SuggestionsPanel({ suggestions }) {
         </p>
       )}
 
-      {experience_notes.length > 0 && (
+      {expPlan.length > 0 && (
         <div>
-          <p style={{ fontSize: 11, fontWeight: 600, color: '#aaa', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Experience Notes</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {experience_notes.map((en, idx) => (
-              <div key={idx} style={{ background: '#fafafa', border: '1px solid #f0f0f2', borderRadius: 8, padding: '8px 12px' }}>
-                <p style={{ fontSize: 13, fontWeight: 600, color: '#333', marginBottom: 4 }}>
-                  {en.role} <span style={{ fontWeight: 400, color: '#888' }}>@ {en.company}</span>
-                </p>
-                <ul style={{ paddingLeft: 14, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  {(en.notes || []).map((note, ni) => (
-                    <li key={ni} style={{ fontSize: 12, color: '#555', lineHeight: 1.5 }}>{note}</li>
-                  ))}
-                </ul>
-              </div>
+          <p style={{ fontSize: 11, fontWeight: 600, color: '#aaa', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Experience Plan</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {expPlan.map((ep, idx) => (
+              <PlanRow key={idx} item={ep} type="exp" idx={idx}
+                isSwap={ep.action === 'swap'} applied={edits.exp[idx]} />
             ))}
           </div>
         </div>
@@ -577,33 +686,8 @@ function SuggestionsPanel({ suggestions }) {
           <p style={{ fontSize: 11, fontWeight: 600, color: '#aaa', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Project Plan</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             {project_plan.map((p, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: '#fafafa', border: '1px solid #f0f0f2', borderRadius: 8, padding: '7px 12px' }}>
-                <span style={{
-                  fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4, flexShrink: 0, marginTop: 1,
-                  background: p.action === 'swap' ? '#fff7ed' : '#f0fdf4',
-                  color: p.action === 'swap' ? '#c2410c' : '#16a34a',
-                }}>
-                  {p.action === 'swap' ? 'SWAP' : 'KEEP'}
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  {p.action === 'swap' ? (
-                    <p style={{ fontSize: 12, color: '#555' }}>
-                      <span style={{ textDecoration: 'line-through', color: '#bbb' }}>{p.remove}</span>
-                      {' → '}
-                      <span style={{ fontWeight: 600, color: '#333' }}>{p.add}</span>
-                    </p>
-                  ) : (
-                    <p style={{ fontSize: 12, fontWeight: 500, color: '#333' }}>{p.title}</p>
-                  )}
-                  {p.notes?.length > 0 && (
-                    <ul style={{ paddingLeft: 12, marginTop: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      {p.notes.map((n, ni) => (
-                        <li key={ni} style={{ fontSize: 11, color: '#777', lineHeight: 1.4 }}>{n}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
+              <PlanRow key={idx} item={p} type="proj" idx={idx}
+                isSwap={p.action === 'swap'} applied={edits.proj[idx]} />
             ))}
           </div>
         </div>

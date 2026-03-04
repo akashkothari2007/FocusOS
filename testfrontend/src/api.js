@@ -63,8 +63,8 @@ export const api = {
   deleteAnalysis: (id) =>
     request(`/api/v1/jobs/${id}/analysis`, { method: 'DELETE' }),
 
-  generateResume: (id) =>
-    request(`/api/v1/jobs/${id}/generate-resume`, { method: 'POST' }),
+  generateResume: (id, body = {}) =>
+    request(`/api/v1/jobs/${id}/generate-resume`, { method: 'POST', body: JSON.stringify(body) }),
 
   // Docs
   getDocs: () =>

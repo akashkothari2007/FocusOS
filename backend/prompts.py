@@ -49,11 +49,12 @@ def analysis_messages(
     parsed: dict,
     profile_ctx: str,
     n_projects: int,
+    n_experiences: int,
 ) -> list[dict]:
     exp_block = _fmt_parsed_experiences(parsed)
     proj_block = _fmt_parsed_projects(parsed)
     profile_block = (
-        f"\nProfile Projects (not on resume — available for swap):\n{profile_ctx}\n"
+        f"\nProfile items (not on resume — available for swap):\n{profile_ctx}\n"
         if profile_ctx
         else ""
     )
@@ -62,8 +63,14 @@ def analysis_messages(
         {
             "match_score": 72,
             "overall": "One-line match summary.",
-            "experience_notes": [
-                {"role": "...", "company": "...", "notes": ["specific bullet-level note", "..."]}
+            "experience_plan": [
+                {"action": "keep", "role": "...", "company": "...", "notes": ["specific bullet-level note"]},
+                {
+                    "action": "swap",
+                    "remove_role": "...", "remove_company": "...",
+                    "add_role": "...", "add_company": "...",
+                    "notes": ["why this swap improves fit"],
+                },
             ],
             "project_plan": [
                 {"action": "keep", "title": "ProjectA", "notes": ["emphasis note"]},
@@ -95,12 +102,17 @@ def analysis_messages(
                 + profile_block
                 + "\nTasks:\n"
                 "1. Score how well this candidate matches the job RIGHT NOW.\n"
-                "2. For each experience, give specific bullet-level notes on what to reframe or emphasize. "
-                "Reference the exact bullet content, not just the role.\n"
-                f"3. Decide the project_plan: select exactly {n_projects} project slots. "
-                "For each slot: 'keep' an existing project or 'swap' one out for a better-fit profile project. "
-                "If no swap improves fit, keep all. "
-                "If a hard requirement is missing, note it plainly — never fabricate.\n\n"
+                f"2. Decide the experience_plan: exactly {n_experiences} entries (one per experience slot). "
+                "Default action is KEEP with bullet-level rewrite notes. "
+                "Only recommend SWAP if the profile experience is CLEARLY more relevant to this specific job "
+                "AND the existing experience being removed is a genuine downgrade for this role. "
+                "NEVER swap a strong software engineering experience for a hardware/embedded/unrelated role just because it shares a keyword. "
+                "Keyword overlap alone is not a reason to swap — overall relevance and strength matter.\n"
+                f"3. Decide the project_plan: exactly {n_projects} entries (one per project slot). "
+                "Default is KEEP with emphasis notes. "
+                "Only recommend SWAP if a profile project significantly outperforms the existing one for this job. "
+                "Never fabricate — if a hard requirement is missing, note it plainly.\n\n"
+                "If in doubt on any swap: KEEP. The resume is already good — the goal is targeted bullet rewrites, not wholesale replacement.\n\n"
                 f"Return JSON matching this schema exactly:\n{schema}"
             ),
         },
@@ -112,30 +124,77 @@ def resume_messages(
     parsed: dict,
     suggestions: dict,
     new_profile_projects: list,
+    new_profile_experiences: list | None = None,
 ) -> list[dict]:
     """Build prompt for bullet rewrite. No LaTeX in, no LaTeX out."""
-    experience_notes = {
-        (en["role"], en["company"]): en.get("notes", [])
-        for en in suggestions.get("experience_notes", [])
-    }
+    experience_plan = suggestions.get("experience_plan", [])
     project_plan = suggestions.get("project_plan", [])
 
+    existing_exp_lookup = {(e.role, e.company): e for e in parsed.get("experiences", [])}
     existing_proj_lookup = {p.title: p for p in parsed.get("projects", [])}
     profile_proj_lookup = {p.get("title", ""): p for p in new_profile_projects}
+    profile_exp_lookup = {e.get("role", "").lower(): e for e in (new_profile_experiences or [])}
 
-    # Build experience blocks with exact bullet count + max char limit
+    # Build experience blocks
     exp_blocks = []
-    for exp in parsed.get("experiences", []):
-        notes = experience_notes.get((exp.role, exp.company), [])
-        notes_str = ("\n  Notes: " + "; ".join(notes)) if notes else ""
-        max_chars = max((len(b) for b in exp.bullets), default=120)
-        bullets_str = "\n".join(f"  [{i+1}] ({len(b)}ch) {b}" for i, b in enumerate(exp.bullets))
-        exp_blocks.append(
-            f"- {exp.role} at {exp.company}\n"
-            f"  Bullet count: {len(exp.bullets)} | Max chars per bullet: {max_chars}\n"
-            f"  Current bullets:\n{bullets_str}"
-            + notes_str
-        )
+    if experience_plan:
+        for plan_item in experience_plan:
+            action = plan_item.get("action", "keep")
+            notes = plan_item.get("notes", [])
+            notes_str = ("\n  Notes: " + "; ".join(notes)) if notes else ""
+
+            if action == "keep":
+                role = plan_item.get("role", "")
+                company = plan_item.get("company", "")
+                exp = existing_exp_lookup.get((role, company))
+                if not exp:
+                    continue
+                max_chars = int(max((len(b) for b in exp.bullets), default=120) * 0.9)
+                bullets_str = "\n".join(f"  [{i+1}] ({len(b)}ch) {b}" for i, b in enumerate(exp.bullets))
+                exp_blocks.append(
+                    f"- KEEP {role} at {company}\n"
+                    f"  Bullet count: {len(exp.bullets)} | Max chars per bullet: {max_chars}\n"
+                    f"  Current bullets:\n{bullets_str}"
+                    + notes_str
+                )
+            elif action == "swap":
+                remove_role = plan_item.get("remove_role", "")
+                remove_company = plan_item.get("remove_company", "")
+                add_role = plan_item.get("add_role", "")
+                add_company = plan_item.get("add_company", "")
+                old_exp = existing_exp_lookup.get((remove_role, remove_company))
+                bullet_count = len(old_exp.bullets) if old_exp else 3
+                max_chars = int(max((len(b) for b in old_exp.bullets), default=120) * 0.9) if old_exp else 110
+                new_exp = profile_exp_lookup.get(add_role.lower(), {})
+                desc_parts = []
+                if new_exp.get("bullets"):
+                    desc_parts.append("Profile bullets: " + " | ".join(new_exp["bullets"]))
+                elif new_exp.get("description"):
+                    desc_parts.append("Description: " + new_exp["description"])
+                desc_str = ("\n  " + "\n  ".join(desc_parts)) if desc_parts else ""
+                exp_blocks.append(
+                    f"- SWAP: replace '{remove_role} at {remove_company}' with '{add_role} at {add_company}'\n"
+                    f"  Bullet count: {bullet_count} | Max chars per bullet: {max_chars}"
+                    + desc_str
+                    + notes_str
+                )
+    else:
+        # Backward compat: experience_notes (old format) or plain keep-all
+        experience_notes = {
+            (en["role"], en["company"]): en.get("notes", [])
+            for en in suggestions.get("experience_notes", [])
+        }
+        for exp in parsed.get("experiences", []):
+            notes = experience_notes.get((exp.role, exp.company), [])
+            notes_str = ("\n  Notes: " + "; ".join(notes)) if notes else ""
+            max_chars = int(max((len(b) for b in exp.bullets), default=120) * 0.9)
+            bullets_str = "\n".join(f"  [{i+1}] ({len(b)}ch) {b}" for i, b in enumerate(exp.bullets))
+            exp_blocks.append(
+                f"- {exp.role} at {exp.company}\n"
+                f"  Bullet count: {len(exp.bullets)} | Max chars per bullet: {max_chars}\n"
+                f"  Current bullets:\n{bullets_str}"
+                + notes_str
+            )
 
     # Build project blocks
     proj_blocks = []
@@ -150,7 +209,7 @@ def resume_messages(
             if not proj:
                 continue
             tech_str = f" | {proj.tech}" if proj.tech else ""
-            max_chars = max((len(b) for b in proj.bullets), default=120)
+            max_chars = int(max((len(b) for b in proj.bullets), default=120) * 0.9)
             bullets_str = "\n".join(f"  [{i+1}] ({len(b)}ch) {b}" for i, b in enumerate(proj.bullets))
             proj_blocks.append(
                 f"- KEEP {title}{tech_str}\n"
@@ -164,7 +223,7 @@ def resume_messages(
             add = plan_item.get("add", "")
             old_proj = existing_proj_lookup.get(remove)
             bullet_count = len(old_proj.bullets) if old_proj else 3
-            max_chars = max((len(b) for b in old_proj.bullets), default=120) if old_proj else 120
+            max_chars = int(max((len(b) for b in old_proj.bullets), default=120) * 0.9) if old_proj else 110
             new_proj = profile_proj_lookup.get(add, {})
             tech = new_proj.get("tech", "")
             desc_parts = []
@@ -211,10 +270,11 @@ def resume_messages(
                 + "\n\n".join(proj_blocks)
                 + "\n\nRules:\n"
                 "1. EXACT bullet count per section — never add or remove bullets\n"
-                "2. HARD LIMIT: each bullet must be UNDER its Max chars value — exceeding it causes layout overflow and breaks the one-page resume\n"
+                "2. HARD LIMIT: each bullet must be UNDER its Max chars — exceeding causes layout overflow\n"
                 "3. Action-verb first, quantify where genuine data exists\n"
-                "4. For SWAP projects, write fresh bullets from the profile description\n"
-                "5. Output experiences in input order; output projects in plan order using final title\n\n"
+                "4. For SWAP entries, write fresh bullets from the profile description\n"
+                "5. Output experiences in plan order (use add_role/add_company for swapped-in entries)\n"
+                "6. Output projects in plan order using final title\n\n"
                 f"Return JSON:\n{schema}"
             ),
         },

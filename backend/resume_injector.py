@@ -7,7 +7,7 @@ log = logging.getLogger("resume_injector")
 
 
 def _escape_latex(text: str) -> str:
-    """Escape special LaTeX characters in plain-text bullet content."""
+    """Escape special LaTeX characters in plain-text content."""
     text = text.replace("%", r"\%")
     text = text.replace("#", r"\#")
     text = text.replace("&", r"\&")
@@ -21,15 +21,13 @@ def _build_item_list(bullets: list[str]) -> str:
 
 def _find_item_list_span(latex: str, after: int) -> tuple[int, int] | None:
     """Return (start, end) of the next \\resumeItemListStart...\\resumeItemListEnd after `after`."""
-    start_marker = r"\resumeItemListStart"
-    end_marker = r"\resumeItemListEnd"
-    s = latex.find(start_marker, after)
+    s = latex.find(r"\resumeItemListStart", after)
     if s == -1:
         return None
-    e = latex.find(end_marker, s)
+    e = latex.find(r"\resumeItemListEnd", s)
     if e == -1:
         return None
-    return s, e + len(end_marker)
+    return s, e + len(r"\resumeItemListEnd")
 
 
 def _replace_bullets_for_experience(latex: str, role: str, company: str, new_bullets: list[str]) -> str:
@@ -46,6 +44,35 @@ def _replace_bullets_for_experience(latex: str, role: str, company: str, new_bul
         log.warning(f"  inject: no item list found after experience '{role} @ {company}'")
         return latex
     return latex[: span[0]] + _build_item_list(new_bullets) + latex[span[1] :]
+
+
+def _swap_experience(
+    latex: str,
+    remove_role: str, remove_company: str,
+    add_role: str, add_company: str,
+    add_date: str, add_location: str,
+    new_bullets: list[str],
+) -> str:
+    """Replace one \\resumeSubheading + bullets with a new experience."""
+    pattern = re.compile(
+        r"\\resumeSubheading\s*\{" + re.escape(remove_role) + r"\}\{[^}]*\}\s*\{" + re.escape(remove_company) + r"\}",
+        re.DOTALL,
+    )
+    m = pattern.search(latex)
+    if not m:
+        log.warning(f"  inject: could not find experience to swap '{remove_role} @ {remove_company}'")
+        return latex
+    span = _find_item_list_span(latex, m.start())
+    if not span:
+        log.warning(f"  inject: no item list for experience swap '{remove_role} @ {remove_company}'")
+        return latex
+    new_heading = (
+        "\\resumeSubheading\n"
+        f"      {{{_escape_latex(add_role)}}}{{{_escape_latex(add_date)}}}\n"
+        f"      {{{_escape_latex(add_company)}}}{{{_escape_latex(add_location)}}}"
+    )
+    new_block = new_heading + "\n" + _build_item_list(new_bullets)
+    return latex[: m.start()] + new_block + latex[span[1] :]
 
 
 def _replace_bullets_for_project(latex: str, title: str, new_bullets: list[str]) -> str:
@@ -88,12 +115,11 @@ def _swap_project(
                 log.warning(f"  inject: no item list for swap remove='{remove_title}'")
                 return latex
             if add_tech:
-                heading_content = f"\\textbf{{{add_title}}} $|$ \\emph{{{add_tech}}}"
+                heading_content = (
+                    f"\\textbf{{{_escape_latex(add_title)}}} $|$ \\emph{{{_escape_latex(add_tech)}}}"
+                )
             else:
-                heading_content = f"\\textbf{{{add_title}}}"
-            new_heading = f"\\resumeProjectHeading{{{{{heading_content}}}}}{{}}"
-            # \resumeProjectHeading takes {{first_arg}}{second_arg}
-            # Build it correctly:
+                heading_content = f"\\textbf{{{_escape_latex(add_title)}}}"
             new_heading = "\\resumeProjectHeading\n      {" + heading_content + "}{}"
             new_block = new_heading + "\n" + _build_item_list(new_bullets)
             return latex[: m.start()] + new_block + latex[span[1] :]
@@ -101,22 +127,60 @@ def _swap_project(
     return latex
 
 
-def inject_changes(base_latex: str, ai_output: dict, project_plan: list[dict]) -> str:
+def inject_changes(
+    base_latex: str,
+    ai_output: dict,
+    project_plan: list[dict],
+    experience_plan: list[dict] | None = None,
+) -> str:
     """Inject AI-generated bullet rewrites into base LaTeX. AI never touches LaTeX syntax.
 
     ai_output: {"experiences": [{role, company, bullets}], "projects": [{title, tech, bullets}]}
-    project_plan: [{"action": "keep"|"swap", "title": ..., "remove": ..., "add": ..., ...}]
+    project_plan:    [{"action": "keep"|"swap", "title"|"remove"/"add", ...}]
+    experience_plan: [{"action": "keep"|"swap", "role"/"company" or "remove_role"/"add_role", ...}]
     """
     latex = base_latex
+    experience_plan = experience_plan or []
 
-    for exp in ai_output.get("experiences", []):
-        role = exp.get("role", "")
-        company = exp.get("company", "")
-        bullets = exp.get("bullets", [])
-        if role and company and bullets:
-            log.info(f"  inject exp : {role} @ {company}  ({len(bullets)} bullets)")
-            latex = _replace_bullets_for_experience(latex, role, company, bullets)
+    # --- Experiences ---
+    ai_experiences = {(e["role"], e["company"]): e for e in ai_output.get("experiences", [])}
 
+    if experience_plan:
+        for plan_item in experience_plan:
+            action = plan_item.get("action", "keep")
+            if action == "keep":
+                role = plan_item.get("role", "")
+                company = plan_item.get("company", "")
+                exp = ai_experiences.get((role, company))
+                if exp and exp.get("bullets"):
+                    log.info(f"  inject exp : KEEP '{role} @ {company}'  ({len(exp['bullets'])} bullets)")
+                    latex = _replace_bullets_for_experience(latex, role, company, exp["bullets"])
+            elif action == "swap":
+                remove_role = plan_item.get("remove_role", "")
+                remove_company = plan_item.get("remove_company", "")
+                add_role = plan_item.get("add_role", "")
+                add_company = plan_item.get("add_company", "")
+                add_date = plan_item.get("add_date", "")
+                add_location = plan_item.get("add_location", "")
+                exp = ai_experiences.get((add_role, add_company))
+                if exp and exp.get("bullets"):
+                    log.info(f"  inject exp : SWAP '{remove_role}' → '{add_role}'  ({len(exp['bullets'])} bullets)")
+                    latex = _swap_experience(
+                        latex, remove_role, remove_company,
+                        add_role, add_company, add_date, add_location,
+                        exp["bullets"],
+                    )
+    else:
+        # Backward compat: no plan — just replace all experience bullets
+        for exp in ai_output.get("experiences", []):
+            role = exp.get("role", "")
+            company = exp.get("company", "")
+            bullets = exp.get("bullets", [])
+            if role and company and bullets:
+                log.info(f"  inject exp : '{role} @ {company}'  ({len(bullets)} bullets)")
+                latex = _replace_bullets_for_experience(latex, role, company, bullets)
+
+    # --- Projects ---
     ai_projects = {p["title"]: p for p in ai_output.get("projects", [])}
 
     for plan_item in project_plan:
