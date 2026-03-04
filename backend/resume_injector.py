@@ -108,7 +108,7 @@ def _replace_bullets_for_project(latex: str, title: str, new_bullets: list[str])
 
 
 def _swap_project(
-    latex: str, remove_title: str, add_title: str, add_tech: str, new_bullets: list[str]
+    latex: str, remove_title: str, add_title: str, add_tech: str, add_link: str, new_bullets: list[str]
 ) -> str:
     proj_re = re.compile(r"\\resumeProjectHeading\s*\{")
     for m in proj_re.finditer(latex):
@@ -126,12 +126,16 @@ def _swap_project(
             if not span:
                 log.warning(f"  inject: no item list for swap remove='{remove_title}'")
                 return latex
+            if add_link:
+                title_content = f"\\href{{{add_link}}}{{\\underline{{{_escape_latex(add_title)}}}}}"
+            else:
+                title_content = _escape_latex(add_title)
             if add_tech:
                 heading_content = (
-                    f"\\textbf{{{_escape_latex(add_title)}}} $|$ \\emph{{{_escape_latex(add_tech)}}}"
+                    f"\\textbf{{{title_content}}} $|$ \\emph{{{_escape_latex(add_tech)}}}"
                 )
             else:
-                heading_content = f"\\textbf{{{_escape_latex(add_title)}}}"
+                heading_content = f"\\textbf{{{title_content}}}"
             new_heading = "\\resumeProjectHeading\n      {" + heading_content + "}{}"
             new_block = new_heading + "\n" + _build_item_list(new_bullets)
             return latex[: m.start()] + new_block + latex[span[1] :]
@@ -216,7 +220,8 @@ def inject_changes(
             remove_title = plan_item.get("remove", "")
             add_title = plan_item.get("add", "")
             tech = ai_proj.get("tech", "")
+            add_link = plan_item.get("add_link", "")
             log.info(f"  inject proj: SWAP '{remove_title}' → '{add_title}'  ({len(bullets)} bullets)")
-            latex = _swap_project(latex, remove_title, add_title, tech, bullets)
+            latex = _swap_project(latex, remove_title, add_title, tech, add_link, bullets)
 
     return latex

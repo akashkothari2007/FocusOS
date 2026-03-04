@@ -116,8 +116,9 @@ def analysis_messages(
                 "Do NOT swap to 'add diversity' or for vague alignment reasons.\n\n"
                 "For KEEP entries: notes should say what specific bullets to strengthen and what angle to take. "
                 "The goal is great bullet rewrites — swaps are a last resort.\n\n"
-                "4. For each KEEP experience/project note, explicitly call out which ATS keywords from the list are "
-                "NOT yet present in that section's bullets and suggest how to work them in naturally.\n"
+                "4. For each KEEP entry: suggest specific, truthful rewrites that naturally incorporate relevant ATS keywords. "
+                "Only suggest adding a keyword if there is a concrete, genuine way to work it in — never suggest forcing a keyword "
+                "that does not fit the actual work done. A missing keyword is better than a forced one.\n"
                 f"Return JSON matching this schema exactly:\n{schema}"
             ),
         },
@@ -263,6 +264,8 @@ def resume_messages(
                 "IMPORTANT: this output is JSON, so backslashes must be doubled — write \\\\textbf{term} not \\textbf{term}. "
                 "Example: 'Deployed \\\\textbf{Kubernetes} orchestration serving \\\\textbf{50k+} daily requests'. "
                 "Bold specific tech, metrics, and key outcomes only. Never bold generic words. "
+                "Weave in job keywords only where they fit naturally and truthfully — if a keyword does not genuinely apply "
+                "to the work described, omit it entirely. A missing keyword reads far better than a forced one. "
                 "Preserve truthfulness — never fabricate experience. "
                 "EXACT original bullet count per section. "
                 "Each bullet MUST stay under its Max chars (one-page hard limit). "

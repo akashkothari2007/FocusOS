@@ -227,6 +227,14 @@ def generate_resume_bg(job_id: int, plan_overrides: dict | None = None) -> None:
                     plan_item.setdefault("add_date", prof_exp.get("date", ""))
                     plan_item.setdefault("add_location", prof_exp.get("location", ""))
 
+        # Enrich project swap entries with link (default to GitHub profile)
+        prof_proj_lookup = {p.get("title", "").lower(): p for p in (profile.get("projects") or [])}
+        for plan_item in project_plan:
+            if plan_item.get("action") == "swap":
+                prof_proj = prof_proj_lookup.get(plan_item.get("add", "").lower(), {})
+                link = prof_proj.get("link") or "https://github.com/akashkothari2007"
+                plan_item.setdefault("add_link", link)
+
         proj_swaps = sum(1 for p in project_plan if p.get("action") == "swap")
         exp_swaps  = sum(1 for e in experience_plan if e.get("action") == "swap")
         log.info(f"  Keywords       : {len(keywords)}")
