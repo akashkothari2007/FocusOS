@@ -13,17 +13,18 @@ def summary_messages(description: str) -> list[dict]:
     return [
         {
             "role": "system",
-            "content": "You are a job description analyst. Always respond with valid JSON only.",
+            "content": "You are a job description analyst and ATS scanner. Always respond with valid JSON only.",
         },
         {
             "role": "user",
             "content": (
-                "Summarize this job description in exactly 3-4 bullet points. "
+                "Summarize this job description in exactly 4-6 bullet points. "
                 "Be specific: name the tech stack, seniority level, the 2-3 most important responsibilities, "
-                "and the 3-4 must-have qualifications or requirements. "
+                "and must-have qualifications and requirements. "
+                "After, read the job description as an ATS system and extract the top 12-15 ATS keywords. "
                 "Plain text only, no markdown.\n\n"
                 f"Job Description:\n{description}\n\n"
-                'Return JSON: {"summary": "<bullets separated by newlines>"}'
+                'Return JSON: {"summary": "<bullets separated by newlines>", "keywords": [<string>, ...]}'
             ),
         },
     ]

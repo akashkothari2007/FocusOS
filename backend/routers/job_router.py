@@ -5,7 +5,8 @@ from typing import Optional, Literal
 
 from db import get_conn
 from models.job_models import CreateJob, UpdateJob, AnalyzeJob
-from ai import chat_json, fmt_profile
+from ai import chat_json
+from latex_handler import fmt_profile, extract_experiences_and_projects
 from prompts import summary_messages, step1_messages, step2_messages, resume_messages
 
 log = logging.getLogger("job_router")
@@ -17,15 +18,16 @@ SEP = "─" * 50
 # Background tasks
 # ---------------------------------------------------------------------------
 
-def generate_summary(job_id: int, description: str) -> None:
+def generate_summary_and_keywords(job_id: int, description: str) -> None:
     try:
         data = chat_json(summary_messages(description))
         summary = data.get("summary", "")
+        keywords = data.get("keywords", [])
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "UPDATE jobs SET summary = %s, analysis_status = 'idle' WHERE id = %s;",
-                    (summary, job_id),
+                    "UPDATE jobs SET summary = %s, keywords = %s, analysis_status = 'idle' WHERE id = %s;",
+                    (summary, json.dumps(keywords), job_id),
                 )
     except Exception as e:
         log.error(f"[SUMMARY] job {job_id} failed: {type(e).__name__}: {e}", exc_info=True)
@@ -53,7 +55,7 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
     # Fetch required data
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT description, summary FROM jobs WHERE id = %s;", (job_id,))
+            cur.execute("SELECT summary FROM jobs WHERE id = %s;", (job_id,))
             job = cur.fetchone()
             cur.execute("SELECT content FROM docs WHERE id = %s;", (input_doc_id,))
             doc = cur.fetchone()
@@ -67,7 +69,7 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
                 cur.execute("UPDATE jobs SET analysis_status = 'error' WHERE id = %s;", (job_id,))
         return
 
-    log.info(f"  Job description : {len(job.get('description') or '')} chars")
+    log.info(f"  Job summary : {len(job.get('summary') or '')} chars")
     log.info(f"  Resume (doc)    : {len(doc.get('content') or '')} chars")
 
     profile_ctx = fmt_profile(profile)
@@ -107,7 +109,7 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
     log.info("  [2/2] Generating suggestions...")
     suggestions = []
     try:
-        data = chat_json(step2_messages(keywords, job["description"], doc["content"], profile_ctx))
+        data = chat_json(step2_messages(keywords, job["summary"], doc["content"], profile_ctx))
         suggestions = list(data["suggestions"])
         log.info(f"  Suggestions ({len(suggestions)}) generated")
     except Exception as e:
@@ -252,7 +254,7 @@ def get_job(job_id: int):
                 """
                 SELECT j.*,
                        ja.input_doc_id, ja.output_doc_id, ja.match_score,
-                       ja.keywords, ja.suggestions, ja.updated_at AS analysis_updated_at
+                       ja.suggestions, ja.updated_at AS analysis_updated_at
                 FROM jobs j
                 LEFT JOIN job_analysis ja ON ja.job_id = j.id
                 WHERE j.id = %s;
@@ -264,7 +266,7 @@ def get_job(job_id: int):
                 raise HTTPException(status_code=404, detail="Job not found")
     return row
 
-
+#CREATE A JOB, START GENERATE_SUMMARY BACKGROUND TASK
 @router.post("/jobs", status_code=201)
 def create_job(job: CreateJob, bg: BackgroundTasks):
     analysis_status = "summarizing" if job.description else "idle"
@@ -281,7 +283,7 @@ def create_job(job: CreateJob, bg: BackgroundTasks):
             row = cur.fetchone()
 
     if job.description:
-        bg.add_task(generate_summary, row["id"], job.description)
+        bg.add_task(generate_summary_and_keywords, row["id"], job.description)
 
     return row
 
