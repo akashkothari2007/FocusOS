@@ -142,7 +142,7 @@ def resume_messages(
                 "5. STRICT ONE PAGE: keep the same number of bullet points as the base resume — do not add bullets, only reword existing ones\n"
                 "6. End with \\end{{document}} and absolutely nothing after it\n"
                 "7. Do not add any text, comments, or notes outside of LaTeX commands\n"
-                "8. Never use \\ inside \resumeProjectHeading{}, \textbf{}, or \href{} arguments. Use -- for dashes and \& for ampersands inside headings.\n"
+                "8. NEVER use \\\\ inside any argument to \\resumeProjectHeading, \\resumeSubheading, \\textbf, \\href, or \\emph. If a title is too long, shorten it instead.\n"
                 'Return JSON: {"resume": "<complete LaTeX source>"}'
             ),
         },
