@@ -1,4 +1,5 @@
 import json
+import logging
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from typing import Optional, Literal
 
@@ -7,17 +8,19 @@ from models.job_models import CreateJob, UpdateJob, AnalyzeJob
 from ai import chat_json, fmt_profile
 from prompts import summary_messages, step1_messages, step2_messages, resume_messages
 
+log = logging.getLogger("job_router")
 router = APIRouter(prefix="/api/v1")
+
+SEP = "─" * 50
 
 # ---------------------------------------------------------------------------
 # Background tasks
 # ---------------------------------------------------------------------------
 
 def generate_summary(job_id: int, description: str) -> None:
-    """Summarize a job description and patch jobs.summary + analysis_status."""
     try:
         data = chat_json(summary_messages(description))
-        summary = data["summary"]
+        summary = data.get("summary", "")
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -25,7 +28,7 @@ def generate_summary(job_id: int, description: str) -> None:
                     (summary, job_id),
                 )
     except Exception as e:
-        print(f"SUMMARY ERROR job {job_id}: {type(e).__name__}: {e}", flush=True)
+        log.error(f"[SUMMARY] job {job_id} failed: {type(e).__name__}: {e}", exc_info=True)
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -35,7 +38,9 @@ def generate_summary(job_id: int, description: str) -> None:
 
 
 def run_analysis(job_id: int, input_doc_id: int) -> None:
-    """Two-step AI analysis: (1) match score + keywords, (2) resume suggestions."""
+    log.info(SEP)
+    log.info(f"  ANALYZE  job_id={job_id}  doc_id={input_doc_id}")
+    log.info(SEP)
 
     # Mark in-progress
     with get_conn() as conn:
@@ -48,9 +53,7 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
     # Fetch required data
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT description, summary FROM jobs WHERE id = %s;", (job_id,)
-            )
+            cur.execute("SELECT description, summary FROM jobs WHERE id = %s;", (job_id,))
             job = cur.fetchone()
             cur.execute("SELECT content FROM docs WHERE id = %s;", (input_doc_id,))
             doc = cur.fetchone()
@@ -58,29 +61,34 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
             profile = cur.fetchone()
 
     if not job or not doc:
+        log.error(f"  ERROR: job={job is not None}  doc={doc is not None} — aborting")
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE jobs SET analysis_status = 'error' WHERE id = %s;", (job_id,)
-                )
+                cur.execute("UPDATE jobs SET analysis_status = 'error' WHERE id = %s;", (job_id,))
         return
 
-    profile_ctx = fmt_profile(profile)
+    log.info(f"  Job description : {len(job.get('description') or '')} chars")
+    log.info(f"  Resume (doc)    : {len(doc.get('content') or '')} chars")
 
-    # --- Step 1: match_score + keywords ---
+    profile_ctx = fmt_profile(profile)
+    log.info(f"  Profile context : {len(profile_ctx)} chars")
+
+    # --- Step 1: match score + keywords ---
+    log.info("")
+    log.info("  [1/2] Scoring match + extracting keywords...")
     try:
         data = chat_json(step1_messages(job["description"], doc["content"], profile_ctx))
         match_score = int(data["match_score"])
         keywords = list(data["keywords"])
-    except Exception:
+        log.info(f"  Match score  : {match_score}/100")
+        log.info(f"  Keywords ({len(keywords)}) : {', '.join(keywords)}")
+    except Exception as e:
+        log.error(f"  ERROR in step 1: {type(e).__name__}: {e}", exc_info=True)
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE jobs SET analysis_status = 'error' WHERE id = %s;", (job_id,)
-                )
-        return  # Abort: step 1 is required
+                cur.execute("UPDATE jobs SET analysis_status = 'error' WHERE id = %s;", (job_id,))
+        return
 
-    # Surface step-1 results immediately
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -93,12 +101,15 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
             )
 
     # --- Step 2: suggestions ---
+    log.info("")
+    log.info("  [2/2] Generating suggestions...")
     suggestions = []
     try:
         data = chat_json(step2_messages(keywords, job["description"], doc["content"], profile_ctx))
         suggestions = list(data["suggestions"])
-    except Exception:
-        pass  # Step 2 failure is non-fatal
+        log.info(f"  Suggestions ({len(suggestions)}) generated")
+    except Exception as e:
+        log.error(f"  ERROR in step 2 (non-fatal): {type(e).__name__}: {e}", exc_info=True)
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -114,6 +125,11 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
                 "UPDATE jobs SET analysis_status = 'done' WHERE id = %s;",
                 (job_id,),
             )
+
+    log.info("")
+    log.info(f"  DONE — analysis complete for job {job_id}")
+    log.info(SEP)
+
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -249,9 +265,11 @@ def delete_analysis(job_id: int):
 
 
 def generate_resume_bg(job_id: int) -> None:
-    """Generate a tailored LaTeX resume and save it as a new doc."""
+    log.info(SEP)
+    log.info(f"  GENERATE RESUME  job_id={job_id}")
+    log.info(SEP)
+
     try:
-        # Mark in-progress
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -259,30 +277,39 @@ def generate_resume_bg(job_id: int) -> None:
                     (job_id,),
                 )
 
-        # Fetch all required data
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT title, company, description FROM jobs WHERE id = %s;",
-                    (job_id,),
-                )
+                cur.execute("SELECT title, company, description FROM jobs WHERE id = %s;", (job_id,))
                 job = cur.fetchone()
-                cur.execute(
-                    "SELECT input_doc_id, keywords, suggestions FROM job_analysis WHERE job_id = %s;",
-                    (job_id,),
-                )
+                cur.execute("SELECT input_doc_id, keywords, suggestions FROM job_analysis WHERE job_id = %s;", (job_id,))
                 analysis = cur.fetchone()
-                cur.execute(
-                    "SELECT content FROM docs WHERE id = %s;",
-                    (analysis["input_doc_id"],),
-                )
+
+        if not job or not analysis:
+            log.error(f"  ERROR: job={job is not None}  analysis={analysis is not None} — aborting")
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("UPDATE jobs SET analysis_status = 'error' WHERE id = %s;", (job_id,))
+            return
+
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT content FROM docs WHERE id = %s;", (analysis["input_doc_id"],))
                 doc = cur.fetchone()
                 cur.execute("SELECT projects, experiences FROM profile WHERE id = 1;")
                 profile = cur.fetchone()
 
+        log.info(f"  Job             : {job['title']} @ {job['company']}")
+        log.info(f"  Base resume     : {len(doc.get('content') or '')} chars  (doc {analysis['input_doc_id']})")
+
         profile_ctx = fmt_profile(profile)
         keywords = analysis["keywords"] or []
         suggestions = analysis["suggestions"] or []
+
+        log.info(f"  Keywords        : {len(keywords)}")
+        log.info(f"  Suggestions     : {len(suggestions)}")
+        log.info(f"  Profile context : {len(profile_ctx)} chars")
+        log.info("")
+        log.info("  Calling AI to generate tailored LaTeX resume...")
 
         data = chat_json(
             resume_messages(
@@ -293,7 +320,8 @@ def generate_resume_bg(job_id: int) -> None:
                 job_description=job["description"] or "",
             )
         )
-        latex = data["resume"]
+        latex = data.get("resume", "")
+        log.info(f"  LaTeX generated : {len(latex)} chars")
 
         doc_title = f"{job['title']} @ {job['company']} \u2014 Tailored"
 
@@ -313,8 +341,14 @@ def generate_resume_bg(job_id: int) -> None:
                     (job_id,),
                 )
 
+        log.info(f"  Saved as doc id={new_doc_id}  title={doc_title!r}")
+        log.info("")
+        log.info(f"  DONE — resume generated for job {job_id}")
+        log.info(SEP)
+
     except Exception as e:
-        print(f"RESUME ERROR job {job_id}: {type(e).__name__}: {e}", flush=True)
+        log.error(f"  ERROR: {type(e).__name__}: {e}", exc_info=True)
+        log.info(SEP)
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -327,16 +361,12 @@ def generate_resume_bg(job_id: int) -> None:
 def generate_resume(job_id: int, bg: BackgroundTasks):
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT analysis_status FROM jobs WHERE id = %s;", (job_id,)
-            )
+            cur.execute("SELECT analysis_status FROM jobs WHERE id = %s;", (job_id,))
             job = cur.fetchone()
             if not job:
                 raise HTTPException(status_code=404, detail="Job not found")
 
-            cur.execute(
-                "SELECT input_doc_id FROM job_analysis WHERE job_id = %s;", (job_id,)
-            )
+            cur.execute("SELECT input_doc_id FROM job_analysis WHERE job_id = %s;", (job_id,))
             analysis = cur.fetchone()
             if not analysis or not analysis["input_doc_id"]:
                 raise HTTPException(status_code=400, detail="No analysis found — run /analyze first")
