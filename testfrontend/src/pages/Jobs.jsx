@@ -98,12 +98,14 @@ export default function Jobs() {
     const edits = planEdits[jobId] || { exp: {}, proj: {} };
     const experience_plan = (suggestions.experience_plan || []).map((ep, idx) =>
       ep.action === 'swap' && edits.exp[idx] === false
-        ? { action: 'keep', role: ep.remove_role, company: ep.remove_company, notes: [] }
+        ? { action: 'keep', role: ep.remove_role, company: ep.remove_company,
+            notes: ['Rewrite bullets to better highlight alignment with job keywords and technical impact'] }
         : ep
     );
     const project_plan = (suggestions.project_plan || []).map((pp, idx) =>
       pp.action === 'swap' && edits.proj[idx] === false
-        ? { action: 'keep', title: pp.remove, notes: [] }
+        ? { action: 'keep', title: pp.remove,
+            notes: ['Rewrite bullets to better highlight relevance to job requirements'] }
         : pp
     );
     return { experience_plan, project_plan };

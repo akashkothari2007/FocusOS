@@ -13,12 +13,15 @@ services:
   backend:
     build: ./backend
     container_name: focusos_backend
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --log-level info --reload
     environment:
       DATABASE_URL: postgresql://focusos:focusos@db:5432/focusos
     env_file:
       - ./backend/.env
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend:/app
     depends_on:
       - db
 volumes:

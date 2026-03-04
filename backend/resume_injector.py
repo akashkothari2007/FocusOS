@@ -7,15 +7,27 @@ log = logging.getLogger("resume_injector")
 
 
 def _escape_latex(text: str) -> str:
-    """Escape special LaTeX characters in plain-text content."""
-    text = text.replace("%", r"\%")
-    text = text.replace("#", r"\#")
-    text = text.replace("&", r"\&")
+    """Escape special LaTeX characters, skipping already-escaped sequences.
+
+    Uses negative lookbehind so \textbf{40%} → \textbf{40\%} correctly
+    and already-escaped \% is left untouched.
+    """
+    text = re.sub(r'(?<!\\)%', r'\\%', text)
+    text = re.sub(r'(?<!\\)#', r'\\#', text)
+    text = re.sub(r'(?<!\\)&', r'\\&', text)
+    return text
+
+
+def _restore_latex_commands(text: str) -> str:
+    """Fix LaTeX commands mangled by JSON parsing (\t → tab, etc.)."""
+    # JSON parser turns \textbf → [TAB]extbf, \textit → [TAB]extit, etc.
+    text = text.replace('\textbf{', r'\textbf{')
+    text = text.replace('\textit{', r'\textit{')
     return text
 
 
 def _build_item_list(bullets: list[str]) -> str:
-    items = "\n".join(f"          \\resumeItem{{{_escape_latex(b)}}}" for b in bullets)
+    items = "\n".join(f"          \\resumeItem{{{_escape_latex(_restore_latex_commands(b))}}}" for b in bullets)
     return f"        \\resumeItemListStart\n{items}\n        \\resumeItemListEnd"
 
 
@@ -143,18 +155,24 @@ def inject_changes(
     experience_plan = experience_plan or []
 
     # --- Experiences ---
-    ai_experiences = {(e["role"], e["company"]): e for e in ai_output.get("experiences", [])}
+    # Use index-based matching: AI must output experiences in plan order.
+    # This avoids string mismatch if AI slightly rephrases role/company.
+    ai_exps = ai_output.get("experiences", [])
 
     if experience_plan:
-        for plan_item in experience_plan:
+        for i, plan_item in enumerate(experience_plan):
+            if i >= len(ai_exps):
+                break
+            ai_exp = ai_exps[i]
+            bullets = ai_exp.get("bullets", [])
+            if not bullets:
+                continue
             action = plan_item.get("action", "keep")
             if action == "keep":
                 role = plan_item.get("role", "")
                 company = plan_item.get("company", "")
-                exp = ai_experiences.get((role, company))
-                if exp and exp.get("bullets"):
-                    log.info(f"  inject exp : KEEP '{role} @ {company}'  ({len(exp['bullets'])} bullets)")
-                    latex = _replace_bullets_for_experience(latex, role, company, exp["bullets"])
+                log.info(f"  inject exp : KEEP '{role} @ {company}'  ({len(bullets)} bullets)")
+                latex = _replace_bullets_for_experience(latex, role, company, bullets)
             elif action == "swap":
                 remove_role = plan_item.get("remove_role", "")
                 remove_company = plan_item.get("remove_company", "")
@@ -162,42 +180,43 @@ def inject_changes(
                 add_company = plan_item.get("add_company", "")
                 add_date = plan_item.get("add_date", "")
                 add_location = plan_item.get("add_location", "")
-                exp = ai_experiences.get((add_role, add_company))
-                if exp and exp.get("bullets"):
-                    log.info(f"  inject exp : SWAP '{remove_role}' → '{add_role}'  ({len(exp['bullets'])} bullets)")
-                    latex = _swap_experience(
-                        latex, remove_role, remove_company,
-                        add_role, add_company, add_date, add_location,
-                        exp["bullets"],
-                    )
+                log.info(f"  inject exp : SWAP '{remove_role}' → '{add_role}'  ({len(bullets)} bullets)")
+                latex = _swap_experience(
+                    latex, remove_role, remove_company,
+                    add_role, add_company, add_date, add_location,
+                    bullets,
+                )
     else:
-        # Backward compat: no plan — just replace all experience bullets
-        for exp in ai_output.get("experiences", []):
-            role = exp.get("role", "")
-            company = exp.get("company", "")
-            bullets = exp.get("bullets", [])
+        # Backward compat: no plan — replace all experience bullets in order
+        for ai_exp in ai_exps:
+            role = ai_exp.get("role", "")
+            company = ai_exp.get("company", "")
+            bullets = ai_exp.get("bullets", [])
             if role and company and bullets:
                 log.info(f"  inject exp : '{role} @ {company}'  ({len(bullets)} bullets)")
                 latex = _replace_bullets_for_experience(latex, role, company, bullets)
 
     # --- Projects ---
-    ai_projects = {p["title"]: p for p in ai_output.get("projects", [])}
+    # Index-based matching for projects too.
+    ai_projs = ai_output.get("projects", [])
 
-    for plan_item in project_plan:
+    for i, plan_item in enumerate(project_plan):
+        if i >= len(ai_projs):
+            break
+        ai_proj = ai_projs[i]
+        bullets = ai_proj.get("bullets", [])
+        if not bullets:
+            continue
         action = plan_item.get("action", "keep")
         if action == "keep":
             title = plan_item.get("title", "")
-            if title in ai_projects:
-                bullets = ai_projects[title].get("bullets", [])
-                log.info(f"  inject proj: KEEP '{title}'  ({len(bullets)} bullets)")
-                latex = _replace_bullets_for_project(latex, title, bullets)
+            log.info(f"  inject proj: KEEP '{title}'  ({len(bullets)} bullets)")
+            latex = _replace_bullets_for_project(latex, title, bullets)
         elif action == "swap":
             remove_title = plan_item.get("remove", "")
             add_title = plan_item.get("add", "")
-            if add_title in ai_projects:
-                bullets = ai_projects[add_title].get("bullets", [])
-                tech = ai_projects[add_title].get("tech", "")
-                log.info(f"  inject proj: SWAP '{remove_title}' → '{add_title}'  ({len(bullets)} bullets)")
-                latex = _swap_project(latex, remove_title, add_title, tech, bullets)
+            tech = ai_proj.get("tech", "")
+            log.info(f"  inject proj: SWAP '{remove_title}' → '{add_title}'  ({len(bullets)} bullets)")
+            latex = _swap_project(latex, remove_title, add_title, tech, bullets)
 
     return latex

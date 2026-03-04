@@ -54,23 +54,4 @@ def chat_json(messages: list[dict], retries: int = 2) -> dict:
     raise exc
 
 
-def fmt_profile(profile) -> str:
-    """Render profile experiences + projects as plain text for prompt context."""
-    if not profile:
-        return ""
-    lines = []
-    for exp in profile.get("experiences") or []:
-        role    = exp.get("role", "")
-        company = exp.get("company", "")
-        date    = exp.get("date", "")
-        lines.append(f"Experience: {role} at {company} ({date})")
-        for bullet in exp.get("bullets") or []:
-            lines.append(f"  - {bullet}")
-    for proj in profile.get("projects") or []:
-        title = proj.get("title", "")
-        desc  = proj.get("description", "")
-        tech  = proj.get("tech", "")
-        lines.append(f"Project: {title}" + (f" [{tech}]" if tech else ""))
-        if desc:
-            lines.append(f"  {desc}")
-    return "\n".join(lines)
+

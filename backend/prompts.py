@@ -16,6 +16,8 @@ def summary_messages(description: str) -> list[dict]:
                 "Be specific: name the tech stack, seniority level, the 2-3 most important responsibilities, "
                 "and must-have qualifications and requirements. "
                 "After, read the job description as an ATS system and extract the top 12-15 ATS keywords. "
+                "ONLY include: programming languages, frameworks, technical skills, methodologies, and domain terms. "
+                "EXCLUDE: salary, benefits, perks, work arrangements, company culture, soft skills like 'collaboration', and anything non-technical. "
                 "Plain text only, no markdown.\n\n"
                 f"Job Description:\n{description}\n\n"
                 'Return JSON: {"summary": "<bullets separated by newlines>", "keywords": [<string>, ...]}'
@@ -102,17 +104,20 @@ def analysis_messages(
                 + profile_block
                 + "\nTasks:\n"
                 "1. Score how well this candidate matches the job RIGHT NOW.\n"
-                f"2. Decide the experience_plan: exactly {n_experiences} entries (one per experience slot). "
-                "Default action is KEEP with bullet-level rewrite notes. "
-                "Only recommend SWAP if the profile experience is CLEARLY more relevant to this specific job "
-                "AND the existing experience being removed is a genuine downgrade for this role. "
-                "NEVER swap a strong software engineering experience for a hardware/embedded/unrelated role just because it shares a keyword. "
-                "Keyword overlap alone is not a reason to swap — overall relevance and strength matter.\n"
-                f"3. Decide the project_plan: exactly {n_projects} entries (one per project slot). "
-                "Default is KEEP with emphasis notes. "
-                "Only recommend SWAP if a profile project significantly outperforms the existing one for this job. "
-                "Never fabricate — if a hard requirement is missing, note it plainly.\n\n"
-                "If in doubt on any swap: KEEP. The resume is already good — the goal is targeted bullet rewrites, not wholesale replacement.\n\n"
+                f"2. Decide the experience_plan: exactly {n_experiences} entries (one per slot). "
+                "DEFAULT is KEEP with specific bullet-level rewrite notes. "
+                "SWAP is rarely correct — only if the profile experience is a substantially stronger match AND "
+                "the existing experience is clearly weak for this role. "
+                "NEVER swap for: soft skills, 'diversity', consulting exposure, or keyword overlap alone. "
+                "NEVER swap a technical/software engineering role for a hardware, embedded, or non-software role. "
+                "Strong recent software internships should almost always be kept.\n"
+                f"3. Decide the project_plan: exactly {n_projects} entries (one per slot). "
+                "DEFAULT is KEEP. Only swap if a profile project is directly and obviously more relevant. "
+                "Do NOT swap to 'add diversity' or for vague alignment reasons.\n\n"
+                "For KEEP entries: notes should say what specific bullets to strengthen and what angle to take. "
+                "The goal is great bullet rewrites — swaps are a last resort.\n\n"
+                "4. For each KEEP experience/project note, explicitly call out which ATS keywords from the list are "
+                "NOT yet present in that section's bullets and suggest how to work them in naturally.\n"
                 f"Return JSON matching this schema exactly:\n{schema}"
             ),
         },
@@ -253,10 +258,14 @@ def resume_messages(
             "role": "system",
             "content": (
                 "You are an expert resume writer. "
-                "Rewrite bullet points to incorporate the given keywords and notes. "
+                "EVERY bullet must be rewritten with stronger, more targeted phrasing — never return a bullet verbatim. "
+                "Bold 1-3 high-impact terms per bullet. "
+                "IMPORTANT: this output is JSON, so backslashes must be doubled — write \\\\textbf{term} not \\textbf{term}. "
+                "Example: 'Deployed \\\\textbf{Kubernetes} orchestration serving \\\\textbf{50k+} daily requests'. "
+                "Bold specific tech, metrics, and key outcomes only. Never bold generic words. "
                 "Preserve truthfulness — never fabricate experience. "
-                "Match the EXACT original bullet count per section. "
-                "Each bullet MUST stay under its specified Max chars — this is a one-page hard limit. "
+                "EXACT original bullet count per section. "
+                "Each bullet MUST stay under its Max chars (one-page hard limit). "
                 "Always respond with valid JSON only."
             ),
         },
@@ -269,12 +278,11 @@ def resume_messages(
                 + "\n\nProjects — keep or replace:\n"
                 + "\n\n".join(proj_blocks)
                 + "\n\nRules:\n"
-                "1. EXACT bullet count per section — never add or remove bullets\n"
-                "2. HARD LIMIT: each bullet must be UNDER its Max chars — exceeding causes layout overflow\n"
+                "1. EXACT bullet count — never add or remove\n"
+                "2. HARD LIMIT: stay under Max chars per bullet\n"
                 "3. Action-verb first, quantify where genuine data exists\n"
                 "4. For SWAP entries, write fresh bullets from the profile description\n"
-                "5. Output experiences in plan order (use add_role/add_company for swapped-in entries)\n"
-                "6. Output projects in plan order using final title\n\n"
+                "5. Output experiences in plan order; output projects in plan order\n\n"
                 f"Return JSON:\n{schema}"
             ),
         },
