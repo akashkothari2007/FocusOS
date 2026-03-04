@@ -6,8 +6,9 @@ from typing import Optional, Literal
 from db import get_conn
 from models.job_models import CreateJob, UpdateJob, AnalyzeJob
 from ai import chat_json
-from latex_handler import fmt_profile
+from latex_handler import fmt_profile, parse_latex
 from prompts import summary_messages, analysis_messages, resume_messages
+from resume_injector import inject_changes
 
 log = logging.getLogger("job_router")
 router = APIRouter(prefix="/api/v1")
@@ -69,25 +70,38 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
                 cur.execute("UPDATE jobs SET analysis_status = 'error' WHERE id = %s;", (job_id,))
         return
 
-    log.info(f"  Job summary : {len(job.get('summary') or '')} chars")
+    log.info(f"  Job summary  : {len(job.get('summary') or '')} chars")
     log.info(f"  Job keywords : {len(job.get('keywords') or '')} chars")
-    log.info(f"  Resume (doc)    : {len(doc.get('content') or '')} chars")
+    log.info(f"  Resume (doc) : {len(doc.get('content') or '')} chars")
 
-    profile_ctx = fmt_profile(profile)
-    log.info(f"  Profile context : {len(profile_ctx)} chars")
+    # Parse resume into structured plain text (no LaTeX noise)
+    parsed = parse_latex(doc["content"])
+    log.info(f"  Parsed       : {len(parsed['experiences'])} experiences, {len(parsed['projects'])} projects")
 
-   
-    # --- Step 2: suggestions ---
+    # Only pass profile projects NOT already on the resume
+    resume_titles = {p.title for p in parsed["projects"]}
+    extra = [p for p in (profile.get("projects") or []) if p.get("title") not in resume_titles]
+    extra_ctx = fmt_profile({"projects": extra, "experiences": []})
+    log.info(f"  Extra profile projects for swap: {len(extra)}")
+
+    # --- Step 2: structured suggestions ---
     log.info("")
-    log.info("Generating match score and suggestions...")
-    suggestions = []
+    log.info("Generating match score and structured suggestions...")
+    suggestions = {}
     match_score = 0
     try:
-        data = chat_json(analysis_messages(job["keywords"], job["summary"], doc["content"], profile_ctx))
-        suggestions = list(data["suggestions"])
+        data = chat_json(analysis_messages(
+            keywords=job["keywords"],
+            job_summary=job["summary"],
+            parsed=parsed,
+            profile_ctx=extra_ctx,
+            n_projects=len(parsed["projects"]),
+        ))
         match_score = int(data["match_score"])
+        suggestions = {k: v for k, v in data.items() if k != "match_score"}
         log.info(f"  Match score  : {match_score}/100")
-        log.info(f"  Suggestions ({len(suggestions)}) generated")
+        log.info(f"  experience_notes: {len(suggestions.get('experience_notes', []))}")
+        log.info(f"  project_plan    : {len(suggestions.get('project_plan', []))}")
     except Exception as e:
         log.error(f"  ERROR in step 2 (non-fatal): {type(e).__name__}: {e}", exc_info=True)
 
@@ -147,31 +161,49 @@ def generate_resume_bg(job_id: int) -> None:
                 cur.execute("SELECT projects, experiences FROM profile WHERE id = 1;")
                 profile = cur.fetchone()
 
-        log.info(f"  Job             : {job['title']} @ {job['company']}")
-        log.info(f"  Base resume     : {len(doc.get('content') or '')} chars  (doc {analysis['input_doc_id']})")
-        log.info(f"  Job summary     : {len(job['summary'] or '')} chars")
+        log.info(f"  Job         : {job['title']} @ {job['company']}")
+        log.info(f"  Base resume : {len(doc.get('content') or '')} chars  (doc {analysis['input_doc_id']})")
 
-        profile_ctx = fmt_profile(profile)
         keywords = job["keywords"] or []
-        suggestions = analysis["suggestions"] or []
+        suggestions_raw = analysis["suggestions"] or {}
 
-        log.info(f"  Keywords        : {len(keywords)}")
-        log.info(f"  Suggestions     : {len(suggestions)}")
-        log.info(f"  Profile context : {len(profile_ctx)} chars")
+        # Parse resume into structured data
+        parsed = parse_latex(doc["content"])
+        log.info(f"  Parsed      : {len(parsed['experiences'])} experiences, {len(parsed['projects'])} projects")
+
+        # Backward compat: old suggestions stored as flat list
+        if isinstance(suggestions_raw, list):
+            log.info("  [compat] old flat suggestions — using keep-all project plan with no notes")
+            project_plan = [{"action": "keep", "title": p.title, "notes": []} for p in parsed["projects"]]
+            suggestions_dict = {"experience_notes": [], "project_plan": project_plan}
+            new_profile_projects = []
+        else:
+            suggestions_dict = suggestions_raw
+            project_plan = suggestions_dict.get("project_plan", [])
+            swap_titles = {s["add"].lower() for s in project_plan if s.get("action") == "swap"}
+            new_profile_projects = [
+                p for p in (profile.get("projects") or []) if p.get("title", "").lower() in swap_titles
+            ]
+
+        log.info(f"  Keywords    : {len(keywords)}")
+        log.info(f"  project_plan: {len(project_plan)} entries  (swaps: {sum(1 for p in project_plan if p.get('action') == 'swap')})")
+        log.info(f"  swap-in projects: {[p.get('title') for p in new_profile_projects]}")
         log.info("")
-        log.info("  Calling AI to generate tailored LaTeX resume...")
+        log.info("  Calling AI for bullet rewrites (no LaTeX in/out)...")
 
         data = chat_json(
             resume_messages(
-                base_resume=doc["content"],
                 keywords=keywords,
-                suggestions=suggestions,
-                profile_ctx=profile_ctx,
-                job_summary=job["summary"] or "",
+                parsed=parsed,
+                suggestions=suggestions_dict,
+                new_profile_projects=new_profile_projects,
             )
         )
-        latex = data.get("resume", "")
-        log.info(f"  LaTeX generated : {len(latex)} chars")
+        log.info(f"  AI output   : {len(data.get('experiences', []))} exp, {len(data.get('projects', []))} proj")
+
+        log.info("  Injecting changes into base LaTeX...")
+        latex = inject_changes(doc["content"], data, project_plan)
+        log.info(f"  LaTeX final : {len(latex)} chars")
 
         doc_title = f"{job['title']} @ {job['company']} \u2014 Tailored"
 

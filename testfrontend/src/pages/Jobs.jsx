@@ -412,15 +412,8 @@ export default function Jobs() {
                           </div>
                         </div>
 
-                        {detail.suggestions?.length > 0 && (
-                          <div>
-                            <p style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>Suggestions</p>
-                            <ol style={{ paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 5 }}>
-                              {detail.suggestions.map((s, idx) => (
-                                <li key={idx} style={{ fontSize: 13, color: '#444', lineHeight: 1.5 }}>{s}</li>
-                              ))}
-                            </ol>
-                          </div>
+                        {detail.suggestions && (
+                          <SuggestionsPanel suggestions={detail.suggestions} />
                         )}
 
                         {/* Re-run (disabled while AI is active) */}
@@ -528,6 +521,93 @@ export default function Jobs() {
           <p className="empty-state">No jobs yet. Add one above.</p>
         )}
       </div>
+    </div>
+  );
+}
+
+function SuggestionsPanel({ suggestions }) {
+  // Backward compat: old flat array format
+  if (Array.isArray(suggestions)) {
+    if (suggestions.length === 0) return null;
+    return (
+      <div>
+        <p style={{ fontSize: 11, fontWeight: 600, color: '#aaa', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Suggestions</p>
+        <ol style={{ paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {suggestions.map((s, idx) => (
+            <li key={idx} style={{ fontSize: 13, color: '#444', lineHeight: 1.5 }}>{s}</li>
+          ))}
+        </ol>
+      </div>
+    );
+  }
+
+  const { overall, experience_notes = [], project_plan = [] } = suggestions;
+  if (!overall && experience_notes.length === 0 && project_plan.length === 0) return null;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {overall && (
+        <p style={{ fontSize: 13, color: '#555', lineHeight: 1.55, borderLeft: '3px solid #6366f1', paddingLeft: 10, fontStyle: 'italic' }}>
+          {overall}
+        </p>
+      )}
+
+      {experience_notes.length > 0 && (
+        <div>
+          <p style={{ fontSize: 11, fontWeight: 600, color: '#aaa', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Experience Notes</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {experience_notes.map((en, idx) => (
+              <div key={idx} style={{ background: '#fafafa', border: '1px solid #f0f0f2', borderRadius: 8, padding: '8px 12px' }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#333', marginBottom: 4 }}>
+                  {en.role} <span style={{ fontWeight: 400, color: '#888' }}>@ {en.company}</span>
+                </p>
+                <ul style={{ paddingLeft: 14, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {(en.notes || []).map((note, ni) => (
+                    <li key={ni} style={{ fontSize: 12, color: '#555', lineHeight: 1.5 }}>{note}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {project_plan.length > 0 && (
+        <div>
+          <p style={{ fontSize: 11, fontWeight: 600, color: '#aaa', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Project Plan</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {project_plan.map((p, idx) => (
+              <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: '#fafafa', border: '1px solid #f0f0f2', borderRadius: 8, padding: '7px 12px' }}>
+                <span style={{
+                  fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4, flexShrink: 0, marginTop: 1,
+                  background: p.action === 'swap' ? '#fff7ed' : '#f0fdf4',
+                  color: p.action === 'swap' ? '#c2410c' : '#16a34a',
+                }}>
+                  {p.action === 'swap' ? 'SWAP' : 'KEEP'}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {p.action === 'swap' ? (
+                    <p style={{ fontSize: 12, color: '#555' }}>
+                      <span style={{ textDecoration: 'line-through', color: '#bbb' }}>{p.remove}</span>
+                      {' → '}
+                      <span style={{ fontWeight: 600, color: '#333' }}>{p.add}</span>
+                    </p>
+                  ) : (
+                    <p style={{ fontSize: 12, fontWeight: 500, color: '#333' }}>{p.title}</p>
+                  )}
+                  {p.notes?.length > 0 && (
+                    <ul style={{ paddingLeft: 12, marginTop: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {p.notes.map((n, ni) => (
+                        <li key={ni} style={{ fontSize: 11, color: '#777', lineHeight: 1.4 }}>{n}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
