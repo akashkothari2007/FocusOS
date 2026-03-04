@@ -252,7 +252,7 @@ body {
   gap: 9px;
   font-size: 14px;
   color: #333;
-  cursor: pointer;
+  cursor: default;
   padding: 4px 6px;
   border-radius: 7px;
   transition: background 0.15s;
@@ -265,6 +265,33 @@ body {
   height: 15px;
   flex-shrink: 0;
 }
+.subtask-drag-handle {
+  cursor: grab;
+  color: #ccc;
+  font-size: 13px;
+  flex-shrink: 0;
+  line-height: 1;
+  user-select: none;
+}
+.subtask-drag-handle:active { cursor: grabbing; }
+.subtask-row .subtask-delete {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: #ccc;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+.subtask-row:hover .subtask-delete { opacity: 1; }
+.subtask-row .subtask-delete:hover { color: #e55; }
+.subtask-dragging { opacity: 0.4; }
+.subtask-drag-over { background: #eef2ff; outline: 1px solid #6366f1; }
 .subtask-done { text-decoration: line-through; color: #bbb; }
 
 .add-subtask-form { margin-top: 2px; }

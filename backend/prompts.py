@@ -19,7 +19,8 @@ def summary_messages(description: str) -> list[dict]:
             "role": "user",
             "content": (
                 "Summarize this job description in exactly 3-4 bullet points. "
-                "Be specific: name the tech stack, the seniority level, and the 2-3 most important responsibilities. "
+                "Be specific: name the tech stack, seniority level, the 2-3 most important responsibilities, "
+                "and the 3-4 must-have qualifications or requirements. "
                 "Plain text only, no markdown.\n\n"
                 f"Job Description:\n{description}\n\n"
                 'Return JSON: {"summary": "<bullets separated by newlines>"}'

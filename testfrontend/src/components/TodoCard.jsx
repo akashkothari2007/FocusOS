@@ -19,6 +19,8 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
   const [desc, setDesc] = useState(todo.description || '');
   const [newSubtask, setNewSubtask] = useState('');
   const [loading, setLoading] = useState(false);
+  const [draggingIdx, setDraggingIdx] = useState(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
 
   const subtasks = parseSubtasks(todo.subtasks);
 
@@ -39,6 +41,44 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
     );
     const updated = await api.updateTodo(todo.id, { subtasks: newSubtasks });
     onUpdate(updated);
+  }
+
+  async function deleteSubtask(index) {
+    const newSubtasks = subtasks.filter((_, i) => i !== index);
+    const updated = await api.updateTodo(todo.id, { subtasks: newSubtasks });
+    onUpdate(updated);
+  }
+
+  function handleDragStart(e, index) {
+    setDraggingIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function handleDragOver(e, index) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIdx(index);
+  }
+
+  async function handleDrop(e, targetIndex) {
+    e.preventDefault();
+    if (draggingIdx === null || draggingIdx === targetIndex) {
+      setDraggingIdx(null);
+      setDragOverIdx(null);
+      return;
+    }
+    const reordered = [...subtasks];
+    const [moved] = reordered.splice(draggingIdx, 1);
+    reordered.splice(targetIndex, 0, moved);
+    setDraggingIdx(null);
+    setDragOverIdx(null);
+    const updated = await api.updateTodo(todo.id, { subtasks: reordered });
+    onUpdate(updated);
+  }
+
+  function handleDragEnd() {
+    setDraggingIdx(null);
+    setDragOverIdx(null);
   }
 
   async function handleAddSubtask(e) {
@@ -100,15 +140,33 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
           )}
 
           <div className="subtasks">
-            {subtasks.map((s) => (
-              <label key={s.id} className="subtask-row">
+            {subtasks.map((s, i) => (
+              <div
+                key={s.id}
+                className={[
+                  'subtask-row',
+                  draggingIdx === i ? 'subtask-dragging' : '',
+                  dragOverIdx === i && draggingIdx !== i ? 'subtask-drag-over' : '',
+                ].join(' ').trim()}
+                draggable
+                onDragStart={(e) => handleDragStart(e, i)}
+                onDragOver={(e) => handleDragOver(e, i)}
+                onDrop={(e) => handleDrop(e, i)}
+                onDragEnd={handleDragEnd}
+              >
+                <span className="subtask-drag-handle">⠿</span>
                 <input
                   type="checkbox"
                   checked={s.status === 'done'}
                   onChange={() => toggleSubtask(s.id)}
                 />
                 <span className={s.status === 'done' ? 'subtask-done' : ''}>{s.title}</span>
-              </label>
+                <button
+                  className="subtask-delete"
+                  onClick={() => deleteSubtask(i)}
+                  title="Delete subtask"
+                >×</button>
+              </div>
             ))}
             <form className="add-subtask-form" onSubmit={handleAddSubtask}>
               <input

@@ -77,7 +77,9 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
     log.info("")
     log.info("  [1/2] Scoring match + extracting keywords...")
     try:
-        data = chat_json(step1_messages(job["description"], doc["content"], profile_ctx))
+        a = step1_messages(job["summary"], doc["content"], profile_ctx)
+        log.info(a)
+        data = chat_json(step1_messages(job["summary"], doc["content"], profile_ctx))
         match_score = int(data["match_score"])
         keywords = list(data["keywords"])
         log.info(f"  Match score  : {match_score}/100")
@@ -129,6 +131,98 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
     log.info("")
     log.info(f"  DONE — analysis complete for job {job_id}")
     log.info(SEP)
+
+def generate_resume_bg(job_id: int) -> None:
+    log.info(SEP)
+    log.info(f"  GENERATE RESUME  job_id={job_id}")
+    log.info(SEP)
+
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE jobs SET analysis_status = 'generating_resume' WHERE id = %s;",
+                    (job_id,),
+                )
+
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT title, company, description FROM jobs WHERE id = %s;", (job_id,))
+                job = cur.fetchone()
+                cur.execute("SELECT input_doc_id, keywords, suggestions FROM job_analysis WHERE job_id = %s;", (job_id,))
+                analysis = cur.fetchone()
+
+        if not job or not analysis:
+            log.error(f"  ERROR: job={job is not None}  analysis={analysis is not None} — aborting")
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("UPDATE jobs SET analysis_status = 'error' WHERE id = %s;", (job_id,))
+            return
+
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT content FROM docs WHERE id = %s;", (analysis["input_doc_id"],))
+                doc = cur.fetchone()
+                cur.execute("SELECT projects, experiences FROM profile WHERE id = 1;")
+                profile = cur.fetchone()
+
+        log.info(f"  Job             : {job['title']} @ {job['company']}")
+        log.info(f"  Base resume     : {len(doc.get('content') or '')} chars  (doc {analysis['input_doc_id']})")
+
+        profile_ctx = fmt_profile(profile)
+        keywords = analysis["keywords"] or []
+        suggestions = analysis["suggestions"] or []
+
+        log.info(f"  Keywords        : {len(keywords)}")
+        log.info(f"  Suggestions     : {len(suggestions)}")
+        log.info(f"  Profile context : {len(profile_ctx)} chars")
+        log.info("")
+        log.info("  Calling AI to generate tailored LaTeX resume...")
+
+        data = chat_json(
+            resume_messages(
+                base_resume=doc["content"],
+                keywords=keywords,
+                suggestions=suggestions,
+                profile_ctx=profile_ctx,
+                job_description=job["description"] or "",
+            )
+        )
+        latex = data.get("resume", "")
+        log.info(f"  LaTeX generated : {len(latex)} chars")
+
+        doc_title = f"{job['title']} @ {job['company']} \u2014 Tailored"
+
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO docs (title, content) VALUES (%s, %s) RETURNING id;",
+                    (doc_title, latex),
+                )
+                new_doc_id = cur.fetchone()["id"]
+                cur.execute(
+                    "UPDATE job_analysis SET output_doc_id = %s, updated_at = NOW() WHERE job_id = %s;",
+                    (new_doc_id, job_id),
+                )
+                cur.execute(
+                    "UPDATE jobs SET analysis_status = 'done' WHERE id = %s;",
+                    (job_id,),
+                )
+
+        log.info(f"  Saved as doc id={new_doc_id}  title={doc_title!r}")
+        log.info("")
+        log.info(f"  DONE — resume generated for job {job_id}")
+        log.info(SEP)
+
+    except Exception as e:
+        log.error(f"  ERROR: {type(e).__name__}: {e}", exc_info=True)
+        log.info(SEP)
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE jobs SET analysis_status = 'error' WHERE id = %s;",
+                    (job_id,),
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -263,98 +357,6 @@ def delete_analysis(job_id: int):
                 raise HTTPException(status_code=404, detail="Analysis not found")
     return
 
-
-def generate_resume_bg(job_id: int) -> None:
-    log.info(SEP)
-    log.info(f"  GENERATE RESUME  job_id={job_id}")
-    log.info(SEP)
-
-    try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE jobs SET analysis_status = 'generating_resume' WHERE id = %s;",
-                    (job_id,),
-                )
-
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT title, company, description FROM jobs WHERE id = %s;", (job_id,))
-                job = cur.fetchone()
-                cur.execute("SELECT input_doc_id, keywords, suggestions FROM job_analysis WHERE job_id = %s;", (job_id,))
-                analysis = cur.fetchone()
-
-        if not job or not analysis:
-            log.error(f"  ERROR: job={job is not None}  analysis={analysis is not None} — aborting")
-            with get_conn() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("UPDATE jobs SET analysis_status = 'error' WHERE id = %s;", (job_id,))
-            return
-
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT content FROM docs WHERE id = %s;", (analysis["input_doc_id"],))
-                doc = cur.fetchone()
-                cur.execute("SELECT projects, experiences FROM profile WHERE id = 1;")
-                profile = cur.fetchone()
-
-        log.info(f"  Job             : {job['title']} @ {job['company']}")
-        log.info(f"  Base resume     : {len(doc.get('content') or '')} chars  (doc {analysis['input_doc_id']})")
-
-        profile_ctx = fmt_profile(profile)
-        keywords = analysis["keywords"] or []
-        suggestions = analysis["suggestions"] or []
-
-        log.info(f"  Keywords        : {len(keywords)}")
-        log.info(f"  Suggestions     : {len(suggestions)}")
-        log.info(f"  Profile context : {len(profile_ctx)} chars")
-        log.info("")
-        log.info("  Calling AI to generate tailored LaTeX resume...")
-
-        data = chat_json(
-            resume_messages(
-                base_resume=doc["content"],
-                keywords=keywords,
-                suggestions=suggestions,
-                profile_ctx=profile_ctx,
-                job_description=job["description"] or "",
-            )
-        )
-        latex = data.get("resume", "")
-        log.info(f"  LaTeX generated : {len(latex)} chars")
-
-        doc_title = f"{job['title']} @ {job['company']} \u2014 Tailored"
-
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO docs (title, content) VALUES (%s, %s) RETURNING id;",
-                    (doc_title, latex),
-                )
-                new_doc_id = cur.fetchone()["id"]
-                cur.execute(
-                    "UPDATE job_analysis SET output_doc_id = %s, updated_at = NOW() WHERE job_id = %s;",
-                    (new_doc_id, job_id),
-                )
-                cur.execute(
-                    "UPDATE jobs SET analysis_status = 'done' WHERE id = %s;",
-                    (job_id,),
-                )
-
-        log.info(f"  Saved as doc id={new_doc_id}  title={doc_title!r}")
-        log.info("")
-        log.info(f"  DONE — resume generated for job {job_id}")
-        log.info(SEP)
-
-    except Exception as e:
-        log.error(f"  ERROR: {type(e).__name__}: {e}", exc_info=True)
-        log.info(SEP)
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE jobs SET analysis_status = 'error' WHERE id = %s;",
-                    (job_id,),
-                )
 
 
 @router.post("/jobs/{job_id}/generate-resume")
