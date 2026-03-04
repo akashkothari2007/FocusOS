@@ -1,12 +1,8 @@
 """Prompt templates for AI calls."""
 
-import re
+from latex_handler import extract_latex_body
 
 
-def extract_latex_body(latex: str) -> str:
-    """Strip preamble — only send content between begin/end document to save tokens."""
-    match = re.search(r'\\begin\{document\}(.*?)\\end\{document\}', latex, re.DOTALL)
-    return match.group(1).strip() if match else latex
 
 
 def summary_messages(description: str) -> list[dict]:
@@ -30,44 +26,12 @@ def summary_messages(description: str) -> list[dict]:
     ]
 
 
-def step1_messages(job_description: str, resume: str, profile_ctx: str) -> list[dict]:
-    """Match score + ATS keywords. Sends body-only resume to save tokens."""
-    resume_body = extract_latex_body(resume)
-    profile_block = (
-        f"Additional candidate context (not yet on resume):\n{profile_ctx}\n\n"
-        if profile_ctx else ""
-    )
-    return [
-        {
-            "role": "system",
-            "content": (
-                "You are a strict ATS system and resume screener. "
-                "Score calibration: 0-30 = weak, 31-55 = partial, 56-75 = decent, "
-                "76-90 = strong, 91-100 = near-perfect. "
-                "Most candidates score 35-65. Do not inflate. "
-                "Penalise clearly missing hard requirements (e.g. required languages, frameworks, domain experience). "
-                "Always respond with valid JSON only."
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                f"Job Description:\n{job_description}\n\n"
-                f"Resume:\n{resume_body}\n\n"
-                + profile_block
-                + "1. Score how well this candidate matches the job RIGHT NOW based on what is demonstrated. "
-                "2. Extract the top 12-15 ATS keywords from the job description — these are the exact terms "
-                "an ATS would scan for (technologies, methodologies, domain terms).\n"
-                'Return JSON: {"match_score": <integer 0-100>, "keywords": [<string>, ...]}'
-            ),
-        },
-    ]
 
 
-def step2_messages(
-    keywords: list[str], job_description: str, resume: str, profile_ctx: str
+
+def analysis_messages(
+    keywords: list[str], job_summary: str, resume: str, profile_ctx: str
 ) -> list[dict]:
-    """Actionable suggestions. Tells AI exactly what format suggestions should take."""
     resume_body = extract_latex_body(resume)
     profile_block = (
         f"Additional candidate context (not yet on resume):\n{profile_ctx}\n\n"
@@ -77,27 +41,27 @@ def step2_messages(
         {
             "role": "system",
             "content": (
-                "You are a direct, honest resume coach helping a candidate tailor their resume. "
-                "You only work with what the candidate has actually done — never invent experience. "
-                "If a requirement is genuinely missing, say so clearly instead of suggesting they fake it. "
+                "You are a strict ATS system and honest resume coach. "
+                "Score calibration: 0-30 = weak, 31-55 = partial, 56-75 = decent, 76-90 = strong, 91-100 = near-perfect. "
+                "Most candidates score 35-65. Do not inflate. "
+                "Penalise clearly missing hard requirements. "
+                "Never invent experience — if something is missing, say so plainly. "
                 "Always respond with valid JSON only."
             ),
         },
         {
             "role": "user",
             "content": (
-                f"Target ATS Keywords: {', '.join(keywords)}\n\n"
-                f"Job Description:\n{job_description}\n\n"
+                f"Job Summary:\n{job_summary}\n\n"
+                f"ATS Keywords: {', '.join(keywords)}\n\n"
                 f"Current Resume:\n{resume_body}\n\n"
                 + profile_block
-                + "Give 6-10 specific, actionable suggestions to better tailor this resume. "
-                "Each suggestion must:\n"
-                "- Reference a specific bullet, section, or project by name\n"
-                "- Say exactly what to change or add (e.g. 'In the RamSoft bullet about MedASR, add that this involved real-time data pipeline design')\n"
-                "- Explain which keyword or requirement it targets\n"
-                "- If a project from the additional context should be added to the resume, say which one and why\n"
-                "- If a hard requirement is simply missing from the candidate's background, state it plainly: 'Candidate has no demonstrated experience with X — do not fabricate'\n"
-                'Return JSON: {"suggestions": [<string>, ...]}'
+                + "1. Score how well this candidate matches the job RIGHT NOW based on what is demonstrated.\n"
+                "2. Give 6-10 specific, actionable suggestions to better tailor this resume. "
+                "Each suggestion must reference a specific bullet, section, or project by name and say exactly what to change. "
+                "If a project from the additional context would better target the job, say which one and why. "
+                "If a hard requirement is missing, state it plainly: 'Candidate has no demonstrated experience with X — do not fabricate'.\n\n"
+                'Return JSON: {"match_score": <integer 0-100>, "suggestions": [<string>, ...]}'
             ),
         },
     ]
@@ -108,7 +72,7 @@ def resume_messages(
     keywords: list[str],
     suggestions: list[str],
     profile_ctx: str,
-    job_description: str,
+    job_summary: str,
 ) -> list[dict]:
     """Generate tailored LaTeX resume. Sends full LaTeX since we need to rewrite it."""
     profile_block = (
@@ -132,7 +96,7 @@ def resume_messages(
             "role": "user",
             "content": (
                 f"Base Resume (LaTeX):\n{base_resume}\n\n"
-                f"Job Description:\n{job_description}\n\n"
+                f"Job Summary:\n{job_summary}\n\n"
                 + profile_block
                 + f"ATS Keywords to incorporate: {keywords_str}\n\n"
                 f"Suggestions to apply:\n{suggestions_block}\n\n"

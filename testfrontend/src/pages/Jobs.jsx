@@ -94,7 +94,7 @@ export default function Jobs() {
         setJobs((prev) =>
           prev.map((j) =>
             j.id === jobId
-              ? { ...j, analysis_status: detail.analysis_status, summary: detail.summary }
+              ? { ...j, analysis_status: detail.analysis_status, summary: detail.summary, keywords: detail.keywords }
               : j
           )
         );
@@ -359,6 +359,20 @@ export default function Jobs() {
                     </div>
                   )}
 
+                  {/* Keywords — available as soon as first AI call completes */}
+                  {(detail?.keywords?.length > 0 || job.keywords?.length > 0) && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {(detail?.keywords || job.keywords).map((kw, idx) => (
+                        <span key={idx} style={{
+                          fontSize: 12, padding: '3px 10px', borderRadius: 20,
+                          background: '#eef0ff', color: '#6366f1',
+                        }}>
+                          {kw}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Status edit */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ fontSize: 13, color: '#888', flexShrink: 0 }}>Status:</span>
@@ -397,22 +411,6 @@ export default function Jobs() {
                             )}
                           </div>
                         </div>
-
-                        {detail.keywords?.length > 0 && (
-                          <div>
-                            <p style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>Keywords</p>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                              {detail.keywords.map((kw, idx) => (
-                                <span key={idx} style={{
-                                  fontSize: 12, padding: '3px 10px', borderRadius: 20,
-                                  background: '#eef0ff', color: '#6366f1',
-                                }}>
-                                  {kw}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
 
                         {detail.suggestions?.length > 0 && (
                           <div>

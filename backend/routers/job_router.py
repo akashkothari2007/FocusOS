@@ -6,8 +6,8 @@ from typing import Optional, Literal
 from db import get_conn
 from models.job_models import CreateJob, UpdateJob, AnalyzeJob
 from ai import chat_json
-from latex_handler import fmt_profile, extract_experiences_and_projects
-from prompts import summary_messages, step1_messages, step2_messages, resume_messages
+from latex_handler import fmt_profile
+from prompts import summary_messages, analysis_messages, resume_messages
 
 log = logging.getLogger("job_router")
 router = APIRouter(prefix="/api/v1")
@@ -55,7 +55,7 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
     # Fetch required data
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT summary FROM jobs WHERE id = %s;", (job_id,))
+            cur.execute("SELECT summary, keywords FROM jobs WHERE id = %s;", (job_id,))
             job = cur.fetchone()
             cur.execute("SELECT content FROM docs WHERE id = %s;", (input_doc_id,))
             doc = cur.fetchone()
@@ -70,47 +70,23 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
         return
 
     log.info(f"  Job summary : {len(job.get('summary') or '')} chars")
+    log.info(f"  Job keywords : {len(job.get('keywords') or '')} chars")
     log.info(f"  Resume (doc)    : {len(doc.get('content') or '')} chars")
 
     profile_ctx = fmt_profile(profile)
     log.info(f"  Profile context : {len(profile_ctx)} chars")
 
-    # --- Step 1: match score + keywords ---
-    log.info("")
-    log.info("  [1/2] Scoring match + extracting keywords...")
-    try:
-        a = step1_messages(job["summary"], doc["content"], profile_ctx)
-        log.info(a)
-        data = chat_json(step1_messages(job["summary"], doc["content"], profile_ctx))
-        match_score = int(data["match_score"])
-        keywords = list(data["keywords"])
-        log.info(f"  Match score  : {match_score}/100")
-        log.info(f"  Keywords ({len(keywords)}) : {', '.join(keywords)}")
-    except Exception as e:
-        log.error(f"  ERROR in step 1: {type(e).__name__}: {e}", exc_info=True)
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("UPDATE jobs SET analysis_status = 'error' WHERE id = %s;", (job_id,))
-        return
-
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                UPDATE job_analysis
-                SET match_score = %s, keywords = %s, updated_at = NOW()
-                WHERE job_id = %s;
-                """,
-                (match_score, json.dumps(keywords), job_id),
-            )
-
+   
     # --- Step 2: suggestions ---
     log.info("")
-    log.info("  [2/2] Generating suggestions...")
+    log.info("Generating match score and suggestions...")
     suggestions = []
+    match_score = 0
     try:
-        data = chat_json(step2_messages(keywords, job["summary"], doc["content"], profile_ctx))
+        data = chat_json(analysis_messages(job["keywords"], job["summary"], doc["content"], profile_ctx))
         suggestions = list(data["suggestions"])
+        match_score = int(data["match_score"])
+        log.info(f"  Match score  : {match_score}/100")
         log.info(f"  Suggestions ({len(suggestions)}) generated")
     except Exception as e:
         log.error(f"  ERROR in step 2 (non-fatal): {type(e).__name__}: {e}", exc_info=True)
@@ -120,10 +96,10 @@ def run_analysis(job_id: int, input_doc_id: int) -> None:
             cur.execute(
                 """
                 UPDATE job_analysis
-                SET suggestions = %s, updated_at = NOW()
+                SET match_score = %s, suggestions = %s, updated_at = NOW()
                 WHERE job_id = %s;
                 """,
-                (json.dumps(suggestions), job_id),
+                (match_score, json.dumps(suggestions), job_id),
             )
             cur.execute(
                 "UPDATE jobs SET analysis_status = 'done' WHERE id = %s;",
@@ -140,6 +116,7 @@ def generate_resume_bg(job_id: int) -> None:
     log.info(SEP)
 
     try:
+        # set status to generating_resume
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -147,11 +124,12 @@ def generate_resume_bg(job_id: int) -> None:
                     (job_id,),
                 )
 
+        # fetch job and analysis
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT title, company, description FROM jobs WHERE id = %s;", (job_id,))
+                cur.execute("SELECT title, company, summary, keywords FROM jobs WHERE id = %s;", (job_id,))
                 job = cur.fetchone()
-                cur.execute("SELECT input_doc_id, keywords, suggestions FROM job_analysis WHERE job_id = %s;", (job_id,))
+                cur.execute("SELECT input_doc_id, suggestions FROM job_analysis WHERE job_id = %s;", (job_id,))
                 analysis = cur.fetchone()
 
         if not job or not analysis:
@@ -161,6 +139,7 @@ def generate_resume_bg(job_id: int) -> None:
                     cur.execute("UPDATE jobs SET analysis_status = 'error' WHERE id = %s;", (job_id,))
             return
 
+        # fetch base resume and profile
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT content FROM docs WHERE id = %s;", (analysis["input_doc_id"],))
@@ -170,9 +149,10 @@ def generate_resume_bg(job_id: int) -> None:
 
         log.info(f"  Job             : {job['title']} @ {job['company']}")
         log.info(f"  Base resume     : {len(doc.get('content') or '')} chars  (doc {analysis['input_doc_id']})")
+        log.info(f"  Job summary     : {len(job['summary'] or '')} chars")
 
         profile_ctx = fmt_profile(profile)
-        keywords = analysis["keywords"] or []
+        keywords = job["keywords"] or []
         suggestions = analysis["suggestions"] or []
 
         log.info(f"  Keywords        : {len(keywords)}")
@@ -187,7 +167,7 @@ def generate_resume_bg(job_id: int) -> None:
                 keywords=keywords,
                 suggestions=suggestions,
                 profile_ctx=profile_ctx,
-                job_description=job["description"] or "",
+                job_summary=job["summary"] or "",
             )
         )
         latex = data.get("resume", "")
@@ -329,12 +309,11 @@ def analyze_job(job_id: int, body: AnalyzeJob, bg: BackgroundTasks):
 
             cur.execute(
                 """
-                INSERT INTO job_analysis (job_id, input_doc_id, match_score, keywords, suggestions, updated_at)
-                VALUES (%s, %s, 0, '[]', '[]', NOW())
+                INSERT INTO job_analysis (job_id, input_doc_id, match_score, suggestions, updated_at)
+                VALUES (%s, %s, 0, '[]', NOW())
                 ON CONFLICT (job_id) DO UPDATE SET
                     input_doc_id = EXCLUDED.input_doc_id,
                     match_score  = 0,
-                    keywords     = '[]',
                     suggestions  = '[]',
                     updated_at   = NOW()
                 RETURNING *;

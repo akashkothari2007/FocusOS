@@ -6,12 +6,35 @@ let _k = 0;
 const newKey = () => ++_k;
 
 function wrap(obj)    { return { _key: newKey(), ...obj }; }
-function blankProject()    { return wrap({ title: '', description: '', link: '', tech: '' }); }
-function blankExperience() { return wrap({ company: '', role: '', date: '', bulletsText: '' }); }
+function blankProject()    { return wrap({ title: '', bulletsText: '', link: '', tech: '' }); }
+function blankExperience() { return wrap({ company: '', role: '', date: '', location: '', bulletsText: '' }); }
+
+// bullets array → "• line1\n• line2"
+function toBulletsText(bullets) {
+  return (bullets || []).filter(Boolean).map(b => '• ' + b).join('\n');
+}
+
+// "• line1\n• line2" → ["line1", "line2"]
+function fromBulletsText(text) {
+  return text.split('\n').map(s => s.replace(/^•\s*/, '').trim()).filter(Boolean);
+}
+
+// Ensure every non-empty line starts with "• " as user types
+function autoBullet(value) {
+  return value.split('\n').map(line =>
+    line && !line.startsWith('• ') ? '• ' + line.replace(/^•\s*/, '') : line
+  ).join('\n');
+}
+
+// Convert a project from the API shape → local editable shape
+function fromApiProject(p) {
+  const bullets = p.bullets || (p.description ? p.description.split('\n') : []);
+  return wrap({ title: p.title || '', link: p.link || '', tech: p.tech || '', bulletsText: toBulletsText(bullets) });
+}
 
 // Convert an experience from the API shape → local editable shape
 function fromApiExp(e) {
-  return wrap({ ...e, bulletsText: (e.bullets || []).join('\n') });
+  return wrap({ ...e, bulletsText: toBulletsText(e.bullets || []) });
 }
 
 // Section header used by all three sections
@@ -58,7 +81,7 @@ export default function Profile() {
   useEffect(() => {
     api.getProfile()
       .then((data) => {
-        setProjects((data.projects || []).map((p) => wrap(p)));
+        setProjects((data.projects || []).map(fromApiProject));
         setExperiences((data.experiences || []).map(fromApiExp));
         setSkills(data.skills || '');
       })
@@ -84,10 +107,13 @@ export default function Profile() {
     setSaveMsg('');
     try {
       const payload = {
-        projects: projects.map(({ _key, ...p }) => p),
+        projects: projects.map(({ _key, bulletsText, ...p }) => ({
+          ...p,
+          bullets: fromBulletsText(bulletsText),
+        })),
         experiences: experiences.map(({ _key, bulletsText, ...e }) => ({
           ...e,
-          bullets: bulletsText.split('\n').map((s) => s.trim()).filter(Boolean),
+          bullets: fromBulletsText(bulletsText),
         })),
         skills,
       };
@@ -152,10 +178,10 @@ export default function Profile() {
                 />
                 <textarea
                   className="input textarea"
-                  placeholder="Description"
-                  rows={2}
-                  value={p.description}
-                  onChange={(e) => updateProject(p._key, 'description', e.target.value)}
+                  placeholder={'Bullets (one per line)\n• Built X that did Y\n• Reduced latency by 40%'}
+                  rows={3}
+                  value={p.bulletsText}
+                  onChange={(e) => updateProject(p._key, 'bulletsText', autoBullet(e.target.value))}
                 />
                 <RemoveBtn onClick={() => setProjects((prev) => prev.filter((x) => x._key !== p._key))} />
               </div>
@@ -194,13 +220,20 @@ export default function Profile() {
                     onChange={(ev) => updateExperience(e._key, 'date', ev.target.value)}
                     style={{ maxWidth: 220 }}
                   />
+                  <input
+                    className="input"
+                    placeholder="Location (e.g. San Francisco, CA)"
+                    value={e.location || ''}
+                    onChange={(ev) => updateExperience(e._key, 'location', ev.target.value)}
+                    style={{ maxWidth: 220 }}
+                  />
                 </div>
                 <textarea
                   className="input textarea"
                   placeholder={'Bullets (one per line)\nBuilt X that did Y\nImproved Z by 30%'}
                   rows={4}
                   value={e.bulletsText}
-                  onChange={(ev) => updateExperience(e._key, 'bulletsText', ev.target.value)}
+                  onChange={(ev) => updateExperience(e._key, 'bulletsText', autoBullet(ev.target.value))}
                 />
                 <RemoveBtn onClick={() => setExperiences((prev) => prev.filter((x) => x._key !== e._key))} />
               </div>
