@@ -88,4 +88,30 @@ export const api = {
 
   updateProfile: (data) =>
     request('/api/v1/profile', { method: 'PATCH', body: JSON.stringify(data) }),
+
+  // Sessions
+  getActiveSession: () =>
+    request('/api/v1/sessions/active'),
+
+  // Habits
+  getHabits: (active) =>
+    request(`/api/v1/habits${active !== undefined ? `?active=${active}` : ''}`),
+
+  createHabit: (name) =>
+    request('/api/v1/habits', { method: 'POST', body: JSON.stringify({ name }) }),
+
+  updateHabit: (id, data) =>
+    request(`/api/v1/habits/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  deleteHabit: (id) =>
+    request(`/api/v1/habits/${id}`, { method: 'DELETE' }),
+
+  getHabitLogs: (days = 7) =>
+    request(`/api/v1/habits/logs?days=${days}`),
+
+  toggleHabitLog: (habitId, logDate) =>
+    request('/api/v1/habits/logs/toggle', {
+      method: 'POST',
+      body: JSON.stringify({ habit_id: habitId, log_date: logDate }),
+    }),
 };

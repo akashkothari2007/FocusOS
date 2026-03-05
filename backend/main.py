@@ -4,7 +4,7 @@ import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from db import get_conn
-from routers import todo_router, session_router, job_router, doc_router, profile_router
+from routers import todo_router, session_router, job_router, doc_router, profile_router, habit_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,3 +42,4 @@ app.include_router(session_router.router)
 app.include_router(job_router.router)
 app.include_router(doc_router.router)
 app.include_router(profile_router.router)
+app.include_router(habit_router.router)

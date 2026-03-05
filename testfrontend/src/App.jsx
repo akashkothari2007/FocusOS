@@ -1,17 +1,32 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
 import Todos from './pages/Todos';
-import History from './pages/History';
+import Metrics from './pages/Metrics';
 import Jobs from './pages/Jobs';
 import Docs from './pages/Docs';
 import Profile from './pages/Profile';
 import SessionBar from './components/SessionBar';
+import { api } from './api';
 import './styles/app.css';
 
 export default function App() {
   const [todos, setTodos] = useState([]);
   // activeSession: { sessionId, todoId, todoTitle, startedAt }
   const [activeSession, setActiveSession] = useState(null);
+
+  // Restore any in-progress session on load
+  useEffect(() => {
+    api.getActiveSession().then((session) => {
+      if (session) {
+        setActiveSession({
+          sessionId: session.id,
+          todoId: session.todo_id,
+          todoTitle: session.todo_title,
+          startedAt: session.started_at,
+        });
+      }
+    }).catch(() => {});
+  }, []);
 
   return (
     <BrowserRouter>
@@ -26,10 +41,10 @@ export default function App() {
             Todos
           </NavLink>
           <NavLink
-            to="/history"
+            to="/metrics"
             className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
           >
-            History
+            Metrics
           </NavLink>
           <NavLink
             to="/jobs"
@@ -65,7 +80,7 @@ export default function App() {
               />
             }
           />
-          <Route path="/history" element={<History />} />
+          <Route path="/metrics" element={<Metrics />} />
           <Route path="/jobs" element={<Jobs />} />
           <Route path="/docs" element={<Docs />} />
           <Route path="/profile" element={<Profile />} />

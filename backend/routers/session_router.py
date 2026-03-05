@@ -5,6 +5,24 @@ from models.session_models import EndSession
 router = APIRouter(prefix="/api/v1")
 
 
+# Returns the one open session (ended_at IS NULL) if any, with its todo title
+@router.get("/sessions/active")
+def get_active_session():
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT s.*, t.title AS todo_title
+                FROM sessions s
+                JOIN todos t ON t.id = s.todo_id
+                WHERE s.ended_at IS NULL
+                LIMIT 1;
+                """
+            )
+            row = cur.fetchone()
+    return row  # None → null in JSON if no active session
+
+
 # get all sessions for a todo (index was created for this purpose)
 @router.get("/todos/{todo_id}/sessions")
 def get_sessions(todo_id: int):

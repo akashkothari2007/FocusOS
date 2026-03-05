@@ -36,9 +36,14 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
   }
 
   async function toggleSubtask(subtaskId) {
-    const newSubtasks = subtasks.map((s) =>
+    const toggled = subtasks.map((s) =>
       s.id === subtaskId ? { ...s, status: s.status === 'done' ? 'pending' : 'done' } : s
     );
+    // Completed subtasks sink to the bottom, pending stay on top
+    const newSubtasks = [
+      ...toggled.filter((s) => s.status === 'pending'),
+      ...toggled.filter((s) => s.status === 'done'),
+    ];
     const updated = await api.updateTodo(todo.id, { subtasks: newSubtasks });
     onUpdate(updated);
   }
