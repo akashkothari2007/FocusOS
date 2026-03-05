@@ -513,10 +513,7 @@ body {
 .habit-cell-done:hover {
   background: linear-gradient(135deg, #4f52d3, #6d28d9);
 }
-.habit-cell-today {
-  outline: 2px solid rgba(99, 102, 241, 0.4);
-  outline-offset: 1px;
-}
+.habit-cell-today {}
 
 .habit-remove {
   width: 20px;
