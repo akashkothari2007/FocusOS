@@ -90,7 +90,11 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
     e.preventDefault();
     if (!newSubtask.trim()) return;
     const nextId = subtasks.length > 0 ? Math.max(...subtasks.map((s) => s.id)) + 1 : 1;
-    const newSubtasks = [...subtasks, { id: nextId, title: newSubtask.trim(), status: 'pending' }];
+    const newSubtasks = [
+      ...subtasks.filter((s) => s.status === 'pending'),
+      { id: nextId, title: newSubtask.trim(), status: 'pending' },
+      ...subtasks.filter((s) => s.status === 'done'),
+    ];
     const updated = await api.updateTodo(todo.id, { subtasks: newSubtasks });
     onUpdate(updated);
     setNewSubtask('');

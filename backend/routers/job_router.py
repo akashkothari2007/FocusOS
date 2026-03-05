@@ -6,9 +6,9 @@ from typing import Optional, Literal
 from db import get_conn
 from models.job_models import CreateJob, UpdateJob, AnalyzeJob, GenerateResumeBody
 from ai import chat_json
-from latex_handler import parse_latex
+from jobs.latex_handler import parse_latex
 from prompts import summary_messages, analysis_messages, resume_messages
-from resume_injector import inject_changes
+from jobs.resume_injector import inject_changes  
 
 log = logging.getLogger("job_router")
 router = APIRouter(prefix="/api/v1")
