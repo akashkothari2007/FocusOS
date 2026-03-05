@@ -26,57 +26,58 @@ def summary_messages(description: str) -> list[dict]:
     ]
 
 
-def _fmt_parsed_experiences(parsed: dict) -> str:
-    lines = []
-    for exp in parsed.get("experiences", []):
-        lines.append(f"- {exp.role} at {exp.company} ({exp.date})")
-        for b in exp.bullets:
-            lines.append(f"  • {b}")
-    return "\n".join(lines)
-
-
-def _fmt_parsed_projects(parsed: dict) -> str:
-    lines = []
-    for proj in parsed.get("projects", []):
-        tech_str = f" | {proj.tech}" if proj.tech else ""
-        lines.append(f"- {proj.title}{tech_str}")
-        for b in proj.bullets:
-            lines.append(f"  • {b}")
-    return "\n".join(lines)
-
-
 def analysis_messages(
     keywords: list[str],
     job_summary: str,
     parsed: dict,
-    profile_ctx: str,
+    extra_experiences: list,
+    extra_projects: list,
     n_projects: int,
     n_experiences: int,
 ) -> list[dict]:
-    exp_block = _fmt_parsed_experiences(parsed)
-    proj_block = _fmt_parsed_projects(parsed)
-    profile_block = (
-        f"\nProfile items (not on resume — available for swap):\n{profile_ctx}\n"
-        if profile_ctx
-        else ""
-    )
+    # Format all experiences: resume first, then profile extras
+    exp_lines = []
+    for exp in parsed.get("experiences", []):
+        exp_lines.append(f"[RESUME] {exp.role} at {exp.company}")
+        for b in exp.bullets:
+            exp_lines.append(f"  • {b}")
+    for exp in extra_experiences:
+        exp_lines.append(f"[PROFILE] {exp.get('role', '?')} at {exp.get('company', '?')}")
+        for b in (exp.get("bullets") or []):
+            exp_lines.append(f"  • {b}")
+
+    # Format all projects: resume first, then profile extras
+    proj_lines = []
+    for proj in parsed.get("projects", []):
+        tech_str = f" | {proj.tech}" if proj.tech else ""
+        proj_lines.append(f"[RESUME] {proj.title}{tech_str}")
+        for b in proj.bullets:
+            proj_lines.append(f"  • {b}")
+    for proj in extra_projects:
+        tech_str = f" | {proj.get('tech', '')}" if proj.get("tech") else ""
+        proj_lines.append(f"[PROFILE] {proj.get('title', '?')}{tech_str}")
+        bullets = proj.get("bullets") or []
+        if not bullets and proj.get("description"):
+            bullets = [proj["description"]]
+        for b in bullets:
+            proj_lines.append(f"  • {b}")
+
+    exp_block = "\n".join(exp_lines)
+    proj_block = "\n".join(proj_lines)
+    n_exp_total = len(parsed.get("experiences", [])) + len(extra_experiences)
+    n_proj_total = len(parsed.get("projects", [])) + len(extra_projects)
 
     schema = json.dumps(
         {
             "match_score": 72,
             "overall": "One-line match summary.",
-            "experience_plan": [
-                {"action": "keep", "role": "...", "company": "...", "notes": ["specific bullet-level note"]},
-                {
-                    "action": "swap",
-                    "remove_role": "...", "remove_company": "...",
-                    "add_role": "...", "add_company": "...",
-                    "notes": ["why this swap improves fit"],
-                },
+            "experiences": [
+                {"role": "...", "company": "...", "recommended": True, "notes": "1-2 sentences: what to strengthen, which keywords fit naturally"},
+                {"role": "ProfileRole", "company": "ProfileCo", "recommended": False, "notes": "Why relevant or not for this role"},
             ],
-            "project_plan": [
-                {"action": "keep", "title": "ProjectA", "notes": ["emphasis note"]},
-                {"action": "swap", "remove": "ProjectB", "add": "ProfileProject", "notes": ["why swap"]},
+            "projects": [
+                {"title": "ProjectA", "recommended": True, "notes": "1-2 sentences on what to strengthen"},
+                {"title": "ProfileProject", "recommended": False, "notes": "Why it could be relevant"},
             ],
         },
         indent=2,
@@ -99,26 +100,21 @@ def analysis_messages(
             "content": (
                 f"Job Summary:\n{job_summary}\n\n"
                 f"ATS Keywords: {', '.join(keywords)}\n\n"
-                f"Resume Experiences:\n{exp_block}\n\n"
-                f"Resume Projects (currently on resume):\n{proj_block}\n"
-                + profile_block
-                + "\nTasks:\n"
-                "1. Score how well this candidate matches the job RIGHT NOW.\n"
-                f"2. Decide the experience_plan: exactly {n_experiences} entries (one per slot). "
-                "DEFAULT is KEEP with specific bullet-level rewrite notes. "
-                "SWAP is rarely correct — only if the profile experience is a substantially stronger match AND "
-                "the existing experience is clearly weak for this role. "
-                "NEVER swap for: soft skills, 'diversity', consulting exposure, or keyword overlap alone. "
-                "NEVER swap a technical/software engineering role for a hardware, embedded, or non-software role. "
-                "Strong recent software internships should almost always be kept.\n"
-                f"3. Decide the project_plan: exactly {n_projects} entries (one per slot). "
-                "DEFAULT is KEEP. Only swap if a profile project is directly and obviously more relevant. "
-                "Do NOT swap to 'add diversity' or for vague alignment reasons.\n\n"
-                "For KEEP entries: notes should say what specific bullets to strengthen and what angle to take. "
-                "The goal is great bullet rewrites — swaps are a last resort.\n\n"
-                "4. For each KEEP entry: suggest specific, truthful rewrites that naturally incorporate relevant ATS keywords. "
-                "Only suggest adding a keyword if there is a concrete, genuine way to work it in — never suggest forcing a keyword "
-                "that does not fit the actual work done. A missing keyword is better than a forced one.\n"
+                f"All Experiences ([RESUME] = on resume, [PROFILE] = available alternative):\n{exp_block}\n\n"
+                f"All Projects ([RESUME] = on resume, [PROFILE] = available alternative):\n{proj_block}\n\n"
+                "Tasks:\n"
+                "1. Score how well the candidate's CURRENT resume matches the job.\n"
+                f"2. Annotate all {n_exp_total} experiences. "
+                f"Set recommended=true for exactly {n_experiences} of them. "
+                "Default to [RESUME] experiences being recommended unless a [PROFILE] experience is clearly more relevant. "
+                "NEVER recommend a hardware/embedded/non-software role for a software engineering job. "
+                "For each experience, write 1-2 sentences of honest, specific notes: "
+                "for [RESUME] items — what to strengthen and which keywords fit naturally; "
+                "for [PROFILE] items — why it is or isn't a good fit. "
+                "Only suggest keywords that genuinely apply — never force one that doesn't fit.\n"
+                f"3. Annotate all {n_proj_total} projects. "
+                f"Set recommended=true for exactly {n_projects} of them. "
+                "Default to [RESUME] projects. For each, write 1-2 sentences of honest, specific notes.\n\n"
                 f"Return JSON matching this schema exactly:\n{schema}"
             ),
         },

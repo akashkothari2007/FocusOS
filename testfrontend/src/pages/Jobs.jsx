@@ -79,8 +79,15 @@ export default function Jobs() {
     setPlanEdits((prev) => {
       if (prev[jobId]) return prev; // already initialized
       const exp = {}, proj = {};
-      (suggestions.experience_plan || []).forEach((ep, idx) => { if (ep.action === 'swap') exp[idx] = true; });
-      (suggestions.project_plan    || []).forEach((pp, idx) => { if (pp.action === 'swap') proj[idx] = true; });
+      if (Array.isArray(suggestions.experiences)) {
+        // New format: recommended=true → include, recommended=false → skip
+        suggestions.experiences.forEach((e, idx) => { exp[idx] = e.recommended !== false; });
+        (suggestions.projects || []).forEach((p, idx) => { proj[idx] = p.recommended !== false; });
+      } else {
+        // Old format: swap entries start as applied
+        (suggestions.experience_plan || []).forEach((ep, idx) => { if (ep.action === 'swap') exp[idx] = true; });
+        (suggestions.project_plan    || []).forEach((pp, idx) => { if (pp.action === 'swap') proj[idx] = true; });
+      }
       return { ...prev, [jobId]: { exp, proj } };
     });
   }
@@ -96,16 +103,29 @@ export default function Jobs() {
   function buildEffectivePlan(jobId, suggestions) {
     if (!suggestions || Array.isArray(suggestions)) return {};
     const edits = planEdits[jobId] || { exp: {}, proj: {} };
+
+    // New format: send selected_experiences / selected_projects
+    if (Array.isArray(suggestions.experiences)) {
+      const selected_experiences = (suggestions.experiences || [])
+        .filter((_, idx) => edits.exp[idx] !== false)
+        .map((e) => ({ role: e.role, company: e.company }));
+      const selected_projects = (suggestions.projects || [])
+        .filter((_, idx) => edits.proj[idx] !== false)
+        .map((p) => ({ title: p.title }));
+      return { selected_experiences, selected_projects };
+    }
+
+    // Old format: keep/swap plan
     const experience_plan = (suggestions.experience_plan || []).map((ep, idx) =>
       ep.action === 'swap' && edits.exp[idx] === false
         ? { action: 'keep', role: ep.remove_role, company: ep.remove_company,
-            notes: ['Rewrite bullets to better highlight alignment with job keywords and technical impact'] }
+            notes: ['Rewrite bullets to be stronger and more specific. Weave in relevant job keywords only where they genuinely and truthfully apply to the actual work done — do not invent or exaggerate.'] }
         : ep
     );
     const project_plan = (suggestions.project_plan || []).map((pp, idx) =>
       pp.action === 'swap' && edits.proj[idx] === false
         ? { action: 'keep', title: pp.remove,
-            notes: ['Rewrite bullets to better highlight relevance to job requirements'] }
+            notes: ['Rewrite bullets to be stronger and more specific. Weave in relevant job keywords only where they genuinely and truthfully apply to the actual work done — do not invent or exaggerate.'] }
         : pp
     );
     return { experience_plan, project_plan };
@@ -574,6 +594,36 @@ export default function Jobs() {
   );
 }
 
+function ItemRow({ included, onToggle, label, notes }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'flex-start', gap: 10,
+      background: included ? '#fafafa' : '#f5f5f5',
+      border: `1px solid ${included ? '#e0e7ff' : '#e5e7eb'}`,
+      borderRadius: 8, padding: '7px 12px',
+      opacity: included ? 1 : 0.65,
+    }}>
+      <button
+        onClick={onToggle}
+        style={{
+          flexShrink: 0, marginTop: 1, fontSize: 10, fontWeight: 700,
+          padding: '2px 7px', borderRadius: 4, border: 'none', cursor: 'pointer',
+          background: included ? '#f0fdf4' : '#f3f4f6',
+          color: included ? '#16a34a' : '#9ca3af',
+        }}
+      >
+        {included ? 'KEEP' : 'SKIP'}
+      </button>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 12, fontWeight: 500, color: included ? '#333' : '#777' }}>{label}</p>
+        {notes && (
+          <p style={{ fontSize: 11, color: '#777', lineHeight: 1.4, marginTop: 2 }}>{notes}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SuggestionsPanel({ suggestions, edits = { exp: {}, proj: {} }, onToggle }) {
   // Backward compat: old flat array format
   if (Array.isArray(suggestions)) {
@@ -590,7 +640,78 @@ function SuggestionsPanel({ suggestions, edits = { exp: {}, proj: {} }, onToggle
     );
   }
 
-  const { overall, experience_plan, experience_notes = [], project_plan = [] } = suggestions;
+  const { overall } = suggestions;
+
+  // New format: flat experiences/projects arrays
+  if (Array.isArray(suggestions.experiences) || Array.isArray(suggestions.projects)) {
+    const experiences = suggestions.experiences || [];
+    const projects = suggestions.projects || [];
+    const selExpCount = experiences.filter((_, idx) => edits.exp[idx] !== false).length;
+    const selProjCount = projects.filter((_, idx) => edits.proj[idx] !== false).length;
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {overall && (
+          <p style={{ fontSize: 13, color: '#555', lineHeight: 1.55, borderLeft: '3px solid #6366f1', paddingLeft: 10, fontStyle: 'italic' }}>
+            {overall}
+          </p>
+        )}
+
+        {experiences.length > 0 && (
+          <div>
+            <p style={{ fontSize: 11, fontWeight: 600, color: '#aaa', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Experiences{' '}
+              <span style={{ color: '#6366f1', textTransform: 'none', letterSpacing: 0 }}>
+                ({selExpCount}/{experiences.length} selected)
+              </span>
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {experiences.map((exp, idx) => {
+                const included = edits.exp[idx] !== false;
+                return (
+                  <ItemRow
+                    key={idx}
+                    included={included}
+                    onToggle={() => onToggle?.('exp', idx)}
+                    label={<>{exp.role} <span style={{ fontWeight: 400, color: '#888' }}>@ {exp.company}</span></>}
+                    notes={exp.notes}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {projects.length > 0 && (
+          <div>
+            <p style={{ fontSize: 11, fontWeight: 600, color: '#aaa', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Projects{' '}
+              <span style={{ color: '#6366f1', textTransform: 'none', letterSpacing: 0 }}>
+                ({selProjCount}/{projects.length} selected)
+              </span>
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {projects.map((proj, idx) => {
+                const included = edits.proj[idx] !== false;
+                return (
+                  <ItemRow
+                    key={idx}
+                    included={included}
+                    onToggle={() => onToggle?.('proj', idx)}
+                    label={proj.title}
+                    notes={proj.notes}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Old format: experience_plan/project_plan
+  const { experience_plan, experience_notes = [], project_plan = [] } = suggestions;
   const expPlan = experience_plan || (experience_notes.length > 0
     ? experience_notes.map(en => ({ action: 'keep', role: en.role, company: en.company, notes: en.notes }))
     : []);
@@ -609,7 +730,6 @@ function SuggestionsPanel({ suggestions, edits = { exp: {}, proj: {} }, onToggle
         {isSwap ? (
           <button
             onClick={() => onToggle?.(type, idx)}
-            title={applied === false ? 'Click to apply swap' : 'Click to skip swap'}
             style={{
               flexShrink: 0, marginTop: 1, fontSize: 10, fontWeight: 700,
               padding: '2px 7px', borderRadius: 4, border: 'none', cursor: 'pointer',

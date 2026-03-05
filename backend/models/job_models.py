@@ -26,3 +26,5 @@ class AnalyzeJob(BaseModel):
 class GenerateResumeBody(BaseModel):
     experience_plan: Optional[list] = None
     project_plan: Optional[list] = None
+    selected_experiences: Optional[list] = None  # new format: [{role, company}]
+    selected_projects: Optional[list] = None     # new format: [{title}]
