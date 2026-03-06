@@ -27,8 +27,8 @@ def create_habit(habit: CreateHabit):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO habits (name) VALUES (%s) RETURNING *;",
-                (habit.name,)
+                "INSERT INTO habits (name, frequency) VALUES (%s, %s) RETURNING *;",
+                (habit.name, habit.frequency)
             )
             row = cur.fetchone()
     return row
@@ -62,6 +62,17 @@ def get_habit_logs(days: int = 7):
             )
             logs = cur.fetchall()
 
+            # Fetch all completed logs (for streak calculation beyond the window)
+            cur.execute(
+                """
+                SELECT hl.habit_id, hl.log_date
+                FROM habit_logs hl
+                JOIN habits h ON h.id = hl.habit_id
+                WHERE h.is_active = TRUE AND hl.completed = TRUE;
+                """
+            )
+            all_completed = cur.fetchall()
+
     # Build lookup: {habit_id: {date_str: completed}}
     log_lookup: dict = {}
     for log in logs:
@@ -71,17 +82,46 @@ def get_habit_logs(days: int = 7):
             log_lookup[hid] = {}
         log_lookup[hid][d_str] = log["completed"]
 
+    # Build completed date sets per habit for streak calculation
+    completed_sets: dict = {}
+    for row in all_completed:
+        hid = row["habit_id"]
+        if hid not in completed_sets:
+            completed_sets[hid] = set()
+        completed_sets[hid].add(row["log_date"])
+
+    def compute_streak(completed_dates: set, today: date) -> int:
+        start = today if today in completed_dates else today - timedelta(days=1)
+        if start not in completed_dates:
+            return 0
+        streak = 0
+        current = start
+        while current in completed_dates:
+            streak += 1
+            current -= timedelta(days=1)
+        return streak
+
+    # Current Mon–Sun week bounds
+    week_start = end_date - timedelta(days=end_date.weekday())
+    week_end = week_start + timedelta(days=6)
+
     result = []
     for habit in habits:
         grid = [
             {"date": str(d), "completed": log_lookup.get(habit["id"], {}).get(str(d), False)}
             for d in date_range
         ]
+        completed = completed_sets.get(habit["id"], set())
+        streak = compute_streak(completed, end_date)
+        week_count = sum(1 for d in completed if week_start <= d <= week_end)
         result.append({
             "id": habit["id"],
             "name": habit["name"],
             "is_active": habit["is_active"],
+            "frequency": habit["frequency"],
             "grid": grid,
+            "streak": streak,
+            "week_count": week_count,
         })
 
     return {"habits": result, "dates": [str(d) for d in date_range]}

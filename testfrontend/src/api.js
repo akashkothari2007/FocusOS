@@ -114,4 +114,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ habit_id: habitId, log_date: logDate }),
     }),
+
+  // Email
+  getEmailStatus: () =>
+    request('/auth/status'),
 };

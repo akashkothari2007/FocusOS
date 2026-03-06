@@ -77,8 +77,20 @@ export default function Profile() {
   const [loading, setLoading]         = useState(true);
   const [saving, setSaving]           = useState(false);
   const [saveMsg, setSaveMsg]         = useState('');   // '' | 'saved' | error text
+  const [authError, setAuthError]     = useState(false);
+  const [emailStatus, setEmailStatus] = useState(null); // null | { connected, email }
 
   useEffect(() => {
+    // Check for ?auth_error=true from OAuth redirect
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('auth_error') === 'true') {
+      setAuthError(true);
+      // Clean the URL param without reload
+      const clean = window.location.pathname;
+      window.history.replaceState({}, '', clean);
+      setTimeout(() => setAuthError(false), 5000);
+    }
+
     api.getProfile()
       .then((data) => {
         setProjects((data.projects || []).map(fromApiProject));
@@ -89,6 +101,10 @@ export default function Profile() {
         // 404 = profile row not seeded yet — just leave empty state
       })
       .finally(() => setLoading(false));
+
+    api.getEmailStatus()
+      .then((data) => setEmailStatus(data))
+      .catch(() => setEmailStatus({ connected: false }));
   }, []);
 
   // ── Projects ─────────────────────────────────────────────
@@ -133,6 +149,35 @@ export default function Profile() {
 
   return (
     <div className="page">
+      {/* Auth error banner */}
+      {authError && (
+        <div style={{
+          background: '#fff1f2',
+          border: '1px solid #fecaca',
+          borderRadius: 8,
+          padding: '12px 16px',
+          marginBottom: 20,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 16 }}>⚠️</span>
+            <span style={{ fontSize: 14, color: '#dc2626', fontWeight: 500 }}>
+              Microsoft connection failed, please try again
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAuthError(false)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 18, lineHeight: 1 }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* Page header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 36 }}>
         <h2 className="page-title">Profile</h2>
@@ -255,6 +300,86 @@ export default function Profile() {
           value={skills}
           onChange={(e) => setSkills(e.target.value)}
         />
+      </section>
+
+      {/* ── Connected Accounts ───────────────────────────── */}
+      <section style={{ marginBottom: 40 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: '#111', marginBottom: 4 }}>Connected Accounts</h3>
+        <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
+          Link an email account to scan your inbox for job leads and action items.
+        </p>
+        <div style={{
+          border: '1px solid #e5e7eb',
+          borderRadius: 10,
+          overflow: 'hidden',
+        }}>
+          {/* Microsoft / Outlook row */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '16px 20px',
+            background: '#fff',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              {/* Microsoft logo (SVG) */}
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="0" y="0" width="10.5" height="10.5" fill="#F25022"/>
+                <rect x="11.5" y="0" width="10.5" height="10.5" fill="#7FBA00"/>
+                <rect x="0" y="11.5" width="10.5" height="10.5" fill="#00A4EF"/>
+                <rect x="11.5" y="11.5" width="10.5" height="10.5" fill="#FFB900"/>
+              </svg>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#111' }}>Microsoft / Outlook</div>
+                {emailStatus?.connected ? (
+                  <div style={{ fontSize: 12, color: '#16a34a', marginTop: 2 }}>
+                    Connected · {emailStatus.email}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: '#aaa', marginTop: 2 }}>Not connected</div>
+                )}
+              </div>
+            </div>
+
+            {emailStatus?.connected ? (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                background: '#f0fdf4',
+                border: '1px solid #bbf7d0',
+                borderRadius: 20,
+                padding: '5px 14px',
+                fontSize: 13,
+                color: '#15803d',
+                fontWeight: 500,
+              }}>
+                <span style={{ fontSize: 11 }}>●</span> Connected
+              </div>
+            ) : (
+              <a
+                href="http://localhost:8000/auth/login"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: '#111',
+                  color: '#fff',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  padding: '7px 16px',
+                  borderRadius: 7,
+                  textDecoration: 'none',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = '#333'}
+                onMouseLeave={e => e.currentTarget.style.background = '#111'}
+              >
+                Connect
+              </a>
+            )}
+          </div>
+        </div>
       </section>
     </div>
   );
