@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import RedirectResponse
 from db import get_conn
 from ms_graph.graph_client import get_auth_url, exchange_code_for_tokens
@@ -20,7 +20,6 @@ async def callback(code: Optional[str] = None, error: Optional[str] = None):
     if error:
         log.error(f"OAuth error from Microsoft: {error}")
         return RedirectResponse(url=ERROR_REDIRECT)
-
     try:
         log.info(f"Callback received with code: {code}")
         tokens = await exchange_code_for_tokens(code)
@@ -30,12 +29,13 @@ async def callback(code: Optional[str] = None, error: Optional[str] = None):
         expires_in = tokens.get("expires_in", 3600)
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
-        async with get_conn() as conn:
-            await conn.execute("DELETE FROM email_accounts")
-            await conn.execute("""
-                INSERT INTO email_accounts (email, access_token, refresh_token, expires_at)
-                VALUES ($1, $2, $3, $4)
-            """, "akash@kotharigroup.com", access_token, refresh_token, expires_at)
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM email_accounts")
+                cur.execute("""
+                    INSERT INTO email_accounts (email, access_token, refresh_token, expires_at)
+                    VALUES (%s, %s, %s, %s)
+                """, ("akash@kotharigroup.com", access_token, refresh_token, expires_at))
     except Exception as exc:
         log.error(f"Failed to complete OAuth flow: {exc}")
         return RedirectResponse(url=ERROR_REDIRECT)
@@ -43,12 +43,14 @@ async def callback(code: Optional[str] = None, error: Optional[str] = None):
     return RedirectResponse(url="http://localhost:5173/profile")
 
 @router.get("/auth/status")
-async def status():
-    async with get_conn() as conn:
-        row = await conn.fetchrow("""
-            SELECT email, expires_at FROM email_accounts
-            ORDER BY created_at DESC LIMIT 1
-        """)
+def status():
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT email, expires_at FROM email_accounts
+                ORDER BY created_at DESC LIMIT 1
+            """)
+            row = cur.fetchone()
     if not row:
         return {"connected": False}
     return {

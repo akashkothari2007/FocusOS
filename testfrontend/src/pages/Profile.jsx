@@ -103,8 +103,8 @@ export default function Profile() {
       .finally(() => setLoading(false));
 
     api.getEmailStatus()
-      .then((data) => setEmailStatus(data))
-      .catch(() => setEmailStatus({ connected: false }));
+      .then((data) => { console.log('[email status]', data); setEmailStatus(data); })
+      .catch((err) => { console.error('[email status error]', err); setEmailStatus({ connected: false }); });
   }, []);
 
   // ── Projects ─────────────────────────────────────────────
