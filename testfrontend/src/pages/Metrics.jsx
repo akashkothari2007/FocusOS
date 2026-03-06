@@ -145,7 +145,16 @@ function HabitMetrics() {
             return (
               <div key={habit.id} className="metrics-habit-row">
                 <div className="metrics-habit-info">
-                  <span className="metrics-habit-name">{habit.name}</span>
+                  <div className="metrics-habit-name-wrap">
+                    <span className={`metrics-habit-name${habit.frequency < 7 ? ' metrics-habit-name-weekly' : ''}`}>{habit.name}</span>
+                    {habit.frequency === 7 ? (
+                      habit.streak > 0 && <span className="habit-streak">🔥{habit.streak}</span>
+                    ) : (
+                      <span className={`habit-progress-badge${habit.week_count >= habit.frequency ? ' habit-progress-done' : ''}`} style={{textAlign:'left', marginLeft:0}}>
+                        {habit.week_count}/{habit.frequency}/wk
+                      </span>
+                    )}
+                  </div>
                   <div className="metrics-habit-bar-wrap">
                     <div className="metrics-habit-bar" style={{ width: `${pct}%` }} />
                   </div>

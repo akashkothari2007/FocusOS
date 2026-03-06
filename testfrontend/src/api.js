@@ -97,8 +97,8 @@ export const api = {
   getHabits: (active) =>
     request(`/api/v1/habits${active !== undefined ? `?active=${active}` : ''}`),
 
-  createHabit: (name) =>
-    request('/api/v1/habits', { method: 'POST', body: JSON.stringify({ name }) }),
+  createHabit: (name, frequency = 7) =>
+    request('/api/v1/habits', { method: 'POST', body: JSON.stringify({ name, frequency }) }),
 
   updateHabit: (id, data) =>
     request(`/api/v1/habits/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
