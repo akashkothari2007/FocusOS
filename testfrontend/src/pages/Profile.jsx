@@ -308,77 +308,80 @@ export default function Profile() {
         <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
           Link an email account to scan your inbox for job leads and action items.
         </p>
-        <div style={{
-          border: '1px solid #e5e7eb',
-          borderRadius: 10,
-          overflow: 'hidden',
-        }}>
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
           {/* Microsoft / Outlook row */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '16px 20px',
-            background: '#fff',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              {/* Microsoft logo (SVG) */}
-              <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="0" y="0" width="10.5" height="10.5" fill="#F25022"/>
-                <rect x="11.5" y="0" width="10.5" height="10.5" fill="#7FBA00"/>
-                <rect x="0" y="11.5" width="10.5" height="10.5" fill="#00A4EF"/>
-                <rect x="11.5" y="11.5" width="10.5" height="10.5" fill="#FFB900"/>
-              </svg>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#111' }}>Microsoft / Outlook</div>
-                {emailStatus?.connected ? (
-                  <div style={{ fontSize: 12, color: '#16a34a', marginTop: 2 }}>
-                    Connected · {emailStatus.email}
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 12, color: '#aaa', marginTop: 2 }}>Not connected</div>
-                )}
-              </div>
-            </div>
+          {(() => {
+            const tokenExpired = emailStatus?.expires_at
+              ? new Date(emailStatus.expires_at) < new Date()
+              : false;
+            const isConnected = emailStatus?.connected && !tokenExpired;
 
-            {emailStatus?.connected ? (
+            return (
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 8,
-                background: '#f0fdf4',
-                border: '1px solid #bbf7d0',
-                borderRadius: 20,
-                padding: '5px 14px',
-                fontSize: 13,
-                color: '#15803d',
-                fontWeight: 500,
+                justifyContent: 'space-between',
+                padding: '16px 20px',
+                background: '#fff',
               }}>
-                <span style={{ fontSize: 11 }}>●</span> Connected
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  {/* Status dot */}
+                  <div style={{
+                    width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                    background: isConnected ? '#16a34a' : '#dc2626',
+                    boxShadow: isConnected ? '0 0 0 3px #dcfce7' : '0 0 0 3px #fee2e2',
+                  }} />
+                  {/* Microsoft logo */}
+                  <svg width="20" height="20" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="0" y="0" width="10.5" height="10.5" fill="#F25022"/>
+                    <rect x="11.5" y="0" width="10.5" height="10.5" fill="#7FBA00"/>
+                    <rect x="0" y="11.5" width="10.5" height="10.5" fill="#00A4EF"/>
+                    <rect x="11.5" y="11.5" width="10.5" height="10.5" fill="#FFB900"/>
+                  </svg>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#111' }}>Microsoft / Outlook</div>
+                    {isConnected ? (
+                      <div style={{ fontSize: 12, color: '#16a34a', marginTop: 2 }}>
+                        Connected · {emailStatus.email}
+                      </div>
+                    ) : tokenExpired ? (
+                      <div style={{ fontSize: 12, color: '#dc2626', marginTop: 2 }}>
+                        Token expired · reconnect to continue
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12, color: '#aaa', marginTop: 2 }}>Not connected</div>
+                    )}
+                  </div>
+                </div>
+
+                {isConnected ? (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 7,
+                    background: '#f0fdf4', border: '1px solid #bbf7d0',
+                    borderRadius: 20, padding: '5px 14px',
+                    fontSize: 13, color: '#15803d', fontWeight: 500,
+                  }}>
+                    Connected
+                  </div>
+                ) : (
+                  <a
+                    href="http://localhost:8000/auth/login"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      background: '#111', color: '#fff',
+                      fontSize: 13, fontWeight: 500,
+                      padding: '7px 16px', borderRadius: 7,
+                      textDecoration: 'none',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#333'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#111'}
+                  >
+                    {tokenExpired ? 'Reconnect' : 'Connect'}
+                  </a>
+                )}
               </div>
-            ) : (
-              <a
-                href="http://localhost:8000/auth/login"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  background: '#111',
-                  color: '#fff',
-                  fontSize: 13,
-                  fontWeight: 500,
-                  padding: '7px 16px',
-                  borderRadius: 7,
-                  textDecoration: 'none',
-                  transition: 'background 0.15s',
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = '#333'}
-                onMouseLeave={e => e.currentTarget.style.background = '#111'}
-              >
-                Connect
-              </a>
-            )}
-          </div>
+            );
+          })()}
         </div>
       </section>
     </div>
