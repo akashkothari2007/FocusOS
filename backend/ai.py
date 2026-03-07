@@ -52,6 +52,30 @@ def chat_json(messages: list[dict], retries: int = 2) -> dict:
             log.error(f"  AI attempt {attempt + 1}/{retries + 1} failed: {type(e).__name__}: {e}")
             exc = e
     raise exc
+    
+import httpx
+
+def chat_ollama(prompt: str, model: str = "llama3.1:8b") -> str:
+    """Call local Ollama instance, returns raw text response."""
+    t0 = time.time()
+    try:
+        r = httpx.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": model,
+                "prompt": prompt,
+                "stream": False
+            },
+            timeout=120.0
+        )
+        r.raise_for_status()
+        elapsed = time.time() - t0
+        result = r.json()["response"]
+        log.info(f"  Ollama responded in {elapsed:.1f}s")
+        return result
+    except Exception as e:
+        log.error(f"  Ollama failed: {type(e).__name__}: {e}")
+        raise
 
 
 

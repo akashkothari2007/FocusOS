@@ -4,6 +4,7 @@ from db import get_conn
 from ms_graph.graph_client import get_auth_url, exchange_code_for_tokens
 from datetime import datetime, timezone, timedelta
 from typing import Optional
+from ms_graph.scanner import fetch_recent_emails
 import logging
 
 log = logging.getLogger("email_router")
@@ -58,3 +59,15 @@ def status():
         "email": row["email"],
         "expires_at": row["expires_at"]
     }
+
+from ms_graph.graph_client import refresh_access_token
+
+@router.post("/auth/refresh")
+async def manual_refresh():
+    token = await refresh_access_token()
+    return {"message": "Token refreshed", "expires_soon": False}
+
+@router.get("/email/test-fetch")
+async def test_fetch(numEmails: int = 10):
+    emails = await fetch_recent_emails(n=numEmails)
+    return {"emails": emails}
