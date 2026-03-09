@@ -45,9 +45,7 @@ def db_check():
 import os
 @app.middleware("http")
 async def api_key_middleware(request: Request, call_next):
-    # skip auth for local requests
-    if request.client.host in ("127.0.0.1", "172.19.0.1"):
-        return await call_next(request)
+
     
     key = request.headers.get("X-API-Key")
     if key != os.environ.get("FOCUSOS_API_KEY"):

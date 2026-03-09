@@ -10,7 +10,7 @@ from openai import AzureOpenAI
 
 log = logging.getLogger("ai")
 
-MODEL = "gpt-4o"
+MODEL = "gpt-4o-mini"
 
 _az_client = None
 

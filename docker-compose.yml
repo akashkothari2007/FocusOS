@@ -1,28 +1,11 @@
 services:
-  db:
-    image: postgres:16
-    container_name: focusos_db
-    environment:
-      POSTGRES_USER: focusos
-      POSTGRES_PASSWORD: focusos
-      POSTGRES_DB: focusos
-    ports:
-      - "5432:5432"
-    volumes:
-      - focusos_pg:/var/lib/postgresql/data
   backend:
     build: ./backend
     container_name: focusos_backend
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --log-level info --reload
-    environment:
-      DATABASE_URL: postgresql://focusos:focusos@db:5432/focusos
     env_file:
       - ./backend/.env
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
-    depends_on:
-      - db
-volumes:
-  focusos_pg:
