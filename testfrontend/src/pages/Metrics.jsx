@@ -99,7 +99,7 @@ function HabitMetrics() {
 
   async function load() {
     const [logsData, habitsData] = await Promise.all([
-      api.getHabitLogs(30),
+      api.getHabitLogs(30, new Date().toLocaleDateString('en-CA')),
       api.getHabits(),
     ]);
     setHabitLogs(logsData);

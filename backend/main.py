@@ -1,7 +1,8 @@
 import logging
 import sys
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from db import get_conn
 from routers import todo_router, session_router, job_router, doc_router, profile_router, habit_router, email_router
@@ -37,6 +38,22 @@ def db_check():
             cur.execute("SELECT 1 AS one;")
             row = cur.fetchone()
     return {"db": "connected", "result": row}
+
+
+
+#-----API Key Middleware-----
+import os
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):
+    # skip auth for local requests
+    if request.client.host in ("127.0.0.1", "172.19.0.1"):
+        return await call_next(request)
+    
+    key = request.headers.get("X-API-Key")
+    if key != os.environ.get("FOCUSOS_API_KEY"):
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    
+    return await call_next(request)
 
 #-----Routers-----
 

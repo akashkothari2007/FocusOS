@@ -74,7 +74,8 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
     }
     const reordered = [...subtasks];
     const [moved] = reordered.splice(draggingIdx, 1);
-    reordered.splice(targetIndex, 0, moved);
+    const insertAt = draggingIdx < targetIndex ? targetIndex - 1 : targetIndex;
+    reordered.splice(insertAt, 0, moved);
     setDraggingIdx(null);
     setDragOverIdx(null);
     const updated = await api.updateTodo(todo.id, { subtasks: reordered });

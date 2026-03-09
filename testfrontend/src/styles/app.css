@@ -395,7 +395,7 @@ body {
 .subtask-row:hover .subtask-delete { opacity: 1; }
 .subtask-row .subtask-delete:hover { color: #e11d48; }
 .subtask-dragging { opacity: 0.4; }
-.subtask-drag-over { background: rgba(99,102,241,0.08); outline: 1.5px solid #6366f1; }
+.subtask-drag-over { border-top: 2px solid #6366f1; }
 .subtask-done { text-decoration: line-through; color: #a0aec0; }
 
 .add-subtask-form { margin-top: 2px; }

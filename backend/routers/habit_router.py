@@ -38,8 +38,11 @@ def create_habit(habit: CreateHabit):
 # so FastAPI matches them as static paths first.
 
 @router.get("/habits/logs")
-def get_habit_logs(days: int = 7):
-    end_date = date.today()
+def get_habit_logs(days: int = 7, today: Optional[str] = None):
+    try:
+        end_date = date.fromisoformat(today) if today else date.today()
+    except ValueError:
+        end_date = date.today()
     start_date = end_date - timedelta(days=days - 1)
     date_range = [start_date + timedelta(days=i) for i in range(days)]
 

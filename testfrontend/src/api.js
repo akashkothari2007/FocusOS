@@ -106,8 +106,11 @@ export const api = {
   deleteHabit: (id) =>
     request(`/api/v1/habits/${id}`, { method: 'DELETE' }),
 
-  getHabitLogs: (days = 7) =>
-    request(`/api/v1/habits/logs?days=${days}`),
+  getHabitLogs: (days = 7, today) => {
+    const params = new URLSearchParams({ days });
+    if (today) params.set('today', today);
+    return request(`/api/v1/habits/logs?${params}`);
+  },
 
   toggleHabitLog: (habitId, logDate) =>
     request('/api/v1/habits/logs/toggle', {

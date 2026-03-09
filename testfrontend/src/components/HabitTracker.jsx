@@ -4,8 +4,15 @@ import { api } from '../api';
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const WEEK_DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
+function toLocalDateStr(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 function getTodayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return toLocalDateStr(new Date());
 }
 
 function getDayLabel(dateStr) {
@@ -21,7 +28,7 @@ function getCurrentWeekDates() {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    return d.toISOString().slice(0, 10);
+    return toLocalDateStr(d);
   });
 }
 
@@ -32,7 +39,7 @@ export default function HabitTracker() {
   const [adding, setAdding] = useState(false);
 
   async function load() {
-    const d = await api.getHabitLogs(7);
+    const d = await api.getHabitLogs(7, getTodayStr());
     setData(d);
   }
 

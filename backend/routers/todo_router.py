@@ -77,3 +77,22 @@ def delete_todo(todo_id: int):
             if not row:
                 raise HTTPException(status_code=404, detail="Todo not found")
     return  # 204 = no content
+
+@router.post("/todos/quick-subtask")
+def quick_subtask(title: str, project: str):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, subtasks FROM todos WHERE title ILIKE %s LIMIT 1",
+                (f"%{project}%",)
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Todo not found")
+            subtasks = row["subtasks"] or []
+            subtasks.append({"id": str(len(subtasks)+1), "title": title, "status": "pending", "order": len(subtasks)})
+            cur.execute(
+                "UPDATE todos SET subtasks = %s WHERE id = %s",
+                (json.dumps(subtasks), row["id"])
+            )
+    return {"message": "Subtask added"}
