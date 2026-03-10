@@ -46,7 +46,7 @@ import os
 @app.middleware("http")
 async def api_key_middleware(request: Request, call_next):
 
-    EXEMPT_PATHS = ["/auth/login", "/auth/callback", "/health", "/db", "/email/test-fetch"]
+    EXEMPT_PATHS = ["/auth/login", "/auth/callback", "/health", "/db"]
     
     if request.url.path in EXEMPT_PATHS:
         return await call_next(request)
