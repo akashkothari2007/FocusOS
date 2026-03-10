@@ -5,6 +5,7 @@ from ms_graph.graph_client import get_auth_url, exchange_code_for_tokens
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from ms_graph.scanner import fetch_recent_emails
+from ms_graph.classifier import classify_emails
 import logging
 
 log = logging.getLogger("email_router")
@@ -70,4 +71,6 @@ async def manual_refresh():
 @router.get("/email/test-fetch")
 async def test_fetch(numEmails: int = 10):
     emails = await fetch_recent_emails(n=numEmails)
-    return {"emails": emails}
+    tasks = await classify_emails(emails)
+    log.info(f"Tasks: {tasks}")
+    return {"tasks": tasks}
