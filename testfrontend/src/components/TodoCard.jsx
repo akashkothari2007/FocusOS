@@ -35,23 +35,25 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
     }
   }
 
-  async function toggleSubtask(subtaskId) {
+  function applySubtasks(newSubtasks) {
+    onUpdate({ ...todo, subtasks: newSubtasks });
+    api.updateTodo(todo.id, { subtasks: newSubtasks })
+      .then(onUpdate)
+      .catch(() => onUpdate(todo));
+  }
+
+  function toggleSubtask(subtaskId) {
     const toggled = subtasks.map((s) =>
       s.id === subtaskId ? { ...s, status: s.status === 'done' ? 'pending' : 'done' } : s
     );
-    // Completed subtasks sink to the bottom, pending stay on top
-    const newSubtasks = [
+    applySubtasks([
       ...toggled.filter((s) => s.status === 'pending'),
       ...toggled.filter((s) => s.status === 'done'),
-    ];
-    const updated = await api.updateTodo(todo.id, { subtasks: newSubtasks });
-    onUpdate(updated);
+    ]);
   }
 
-  async function deleteSubtask(index) {
-    const newSubtasks = subtasks.filter((_, i) => i !== index);
-    const updated = await api.updateTodo(todo.id, { subtasks: newSubtasks });
-    onUpdate(updated);
+  function deleteSubtask(index) {
+    applySubtasks(subtasks.filter((_, i) => i !== index));
   }
 
   function handleDragStart(e, index) {
@@ -65,7 +67,7 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
     setDragOverIdx(index);
   }
 
-  async function handleDrop(e, targetIndex) {
+  function handleDrop(e, targetIndex) {
     e.preventDefault();
     if (draggingIdx === null || draggingIdx === targetIndex) {
       setDraggingIdx(null);
@@ -78,8 +80,7 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
     reordered.splice(insertAt, 0, moved);
     setDraggingIdx(null);
     setDragOverIdx(null);
-    const updated = await api.updateTodo(todo.id, { subtasks: reordered });
-    onUpdate(updated);
+    applySubtasks(reordered);
   }
 
   function handleDragEnd() {
@@ -87,18 +88,16 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
     setDragOverIdx(null);
   }
 
-  async function handleAddSubtask(e) {
+  function handleAddSubtask(e) {
     e.preventDefault();
     if (!newSubtask.trim()) return;
     const nextId = subtasks.length > 0 ? Math.max(...subtasks.map((s) => s.id)) + 1 : 1;
-    const newSubtasks = [
+    setNewSubtask('');
+    applySubtasks([
       ...subtasks.filter((s) => s.status === 'pending'),
       { id: nextId, title: newSubtask.trim(), status: 'pending' },
       ...subtasks.filter((s) => s.status === 'done'),
-    ];
-    const updated = await api.updateTodo(todo.id, { subtasks: newSubtasks });
-    onUpdate(updated);
-    setNewSubtask('');
+    ]);
   }
 
   async function handleMarkDone() {

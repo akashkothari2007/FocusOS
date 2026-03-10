@@ -1,33 +1,43 @@
 import { useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 
-export default function AddTodoForm({ onAdd }) {
+export default function AddTodoForm() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const queryClient = useQueryClient();
 
-  async function handleSubmit(e) {
+  const addMutation = useMutation({
+    mutationFn: (payload) => api.createTodo(payload),
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: ['todos', 'pending'] });
+      const prev = queryClient.getQueryData(['todos', 'pending']);
+      const temp = { id: `temp-${Date.now()}`, subtasks: [], status: 'pending', ...payload };
+      queryClient.setQueryData(['todos', 'pending'], (old = []) => [temp, ...old]);
+      return { prev };
+    },
+    onError: (_, __, ctx) => queryClient.setQueryData(['todos', 'pending'], ctx.prev),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['todos', 'pending'] }),
+  });
+
+  function handleSubmit(e) {
     e.preventDefault();
     if (!title.trim()) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const todo = await api.createTodo({
+    addMutation.mutate(
+      {
         title: title.trim(),
         description: description.trim() || undefined,
         due_date: dueDate || undefined,
-      });
-      onAdd(todo);
-      setTitle('');
-      setDescription('');
-      setDueDate('');
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+      },
+      {
+        onSuccess: () => {
+          setTitle('');
+          setDescription('');
+          setDueDate('');
+        },
+      }
+    );
   }
 
   return (
@@ -46,8 +56,8 @@ export default function AddTodoForm({ onAdd }) {
           value={dueDate}
           onChange={(e) => setDueDate(e.target.value)}
         />
-        <button className="btn btn-primary" type="submit" disabled={loading}>
-          {loading ? '...' : 'Add'}
+        <button className="btn btn-primary" type="submit" disabled={addMutation.isPending}>
+          {addMutation.isPending ? '...' : 'Add'}
         </button>
       </div>
       <textarea
@@ -57,7 +67,9 @@ export default function AddTodoForm({ onAdd }) {
         onChange={(e) => setDescription(e.target.value)}
         rows={2}
       />
-      {error && <p style={{ color: '#e11d48', fontSize: 13 }}>{error}</p>}
+      {addMutation.isError && (
+        <p style={{ color: '#e11d48', fontSize: 13 }}>{addMutation.error.message}</p>
+      )}
     </form>
   );
 }

@@ -10,7 +10,6 @@ import { api } from './api';
 import './styles/app.css';
 
 export default function App() {
-  const [todos, setTodos] = useState([]);
   // activeSession: { sessionId, todoId, todoTitle, startedAt }
   const [activeSession, setActiveSession] = useState(null);
 
@@ -73,8 +72,6 @@ export default function App() {
             path="/"
             element={
               <Todos
-                todos={todos}
-                setTodos={setTodos}
                 activeSession={activeSession}
                 setActiveSession={setActiveSession}
               />

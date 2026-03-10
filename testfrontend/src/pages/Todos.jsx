@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import AddTodoForm from '../components/AddTodoForm';
 import TodoCard from '../components/TodoCard';
@@ -6,21 +6,25 @@ import HabitTracker from '../components/HabitTracker';
 
 const BORDER_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#14b8a6'];
 
-export default function Todos({ todos, setTodos, activeSession, setActiveSession }) {
-  useEffect(() => {
-    api.getTodos('pending').then((data) => setTodos(data.todos));
-  }, []);
+export default function Todos({ activeSession, setActiveSession }) {
+  const queryClient = useQueryClient();
 
-  function handleAddTodo(newTodo) {
-    setTodos((prev) => [newTodo, ...prev]);
-  }
+  const { data } = useQuery({
+    queryKey: ['todos', 'pending'],
+    queryFn: () => api.getTodos('pending').then((d) => d.todos),
+  });
+  const todos = data ?? [];
 
   function handleMarkDone(todoId) {
-    setTodos((prev) => prev.filter((t) => t.id !== todoId));
+    queryClient.setQueryData(['todos', 'pending'], (old = []) =>
+      old.filter((t) => t.id !== todoId)
+    );
   }
 
   function handleUpdate(updatedTodo) {
-    setTodos((prev) => prev.map((t) => (t.id === updatedTodo.id ? updatedTodo : t)));
+    queryClient.setQueryData(['todos', 'pending'], (old = []) =>
+      old.map((t) => (t.id === updatedTodo.id ? updatedTodo : t))
+    );
   }
 
   async function handleStartSession(todo) {
@@ -44,7 +48,7 @@ export default function Todos({ todos, setTodos, activeSession, setActiveSession
   return (
     <div className="todos-page">
       <div className="todos-main">
-        <AddTodoForm onAdd={handleAddTodo} />
+        <AddTodoForm />
         <div className="todo-list">
           {todos.map((todo, i) => (
             <TodoCard

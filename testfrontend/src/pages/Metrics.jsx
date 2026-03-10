@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 
 function formatDuration(seconds) {
@@ -92,44 +93,53 @@ function TodoSessionRow({ todo, onDelete }) {
 // ─── Habit Metrics Section ────────────────────────────────────────────────────
 
 function HabitMetrics() {
-  const [habitLogs, setHabitLogs] = useState(null);
-  const [allHabits, setAllHabits] = useState(null);
   const [newHabit, setNewHabit] = useState('');
-  const [adding, setAdding] = useState(false);
+  const queryClient = useQueryClient();
 
-  async function load() {
-    const [logsData, habitsData] = await Promise.all([
-      api.getHabitLogs(30, new Date().toLocaleDateString('en-CA')),
-      api.getHabits(),
-    ]);
-    setHabitLogs(logsData);
-    setAllHabits(habitsData.habits);
+  const { data: habitLogs } = useQuery({
+    queryKey: ['habitLogs', 30],
+    queryFn: () => api.getHabitLogs(30, new Date().toLocaleDateString('en-CA')),
+  });
+
+  const { data: habitsData } = useQuery({
+    queryKey: ['habits'],
+    queryFn: () => api.getHabits(),
+  });
+  const allHabits = habitsData?.habits ?? null;
+
+  function invalidateHabits() {
+    queryClient.invalidateQueries({ queryKey: ['habitLogs'] });
+    queryClient.invalidateQueries({ queryKey: ['habits'] });
   }
 
-  useEffect(() => { load(); }, []);
+  const addMutation = useMutation({
+    mutationFn: (name) => api.createHabit(name),
+    onSuccess: () => { setNewHabit(''); invalidateHabits(); },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => api.deleteHabit(id),
+    onSuccess: invalidateHabits,
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: ({ id, isActive }) => api.updateHabit(id, { is_active: !isActive }),
+    onSuccess: invalidateHabits,
+  });
 
   async function handleAdd(e) {
     e.preventDefault();
     if (!newHabit.trim()) return;
-    setAdding(true);
-    try {
-      await api.createHabit(newHabit.trim());
-      setNewHabit('');
-      load();
-    } finally {
-      setAdding(false);
-    }
+    addMutation.mutate(newHabit.trim());
   }
 
   async function handleDelete(id) {
     if (!window.confirm('Permanently delete this habit and all its logs?')) return;
-    await api.deleteHabit(id);
-    load();
+    deleteMutation.mutate(id);
   }
 
   async function handleToggleActive(id, isActive) {
-    await api.updateHabit(id, { is_active: !isActive });
-    load();
+    toggleActiveMutation.mutate({ id, isActive });
   }
 
   return (
@@ -199,8 +209,8 @@ function HabitMetrics() {
           value={newHabit}
           onChange={(e) => setNewHabit(e.target.value)}
         />
-        <button className="btn btn-primary btn-sm" type="submit" disabled={adding}>
-          {adding ? '…' : 'Add'}
+        <button className="btn btn-primary btn-sm" type="submit" disabled={addMutation.isPending}>
+          {addMutation.isPending ? '…' : 'Add'}
         </button>
       </form>
     </div>
@@ -210,21 +220,16 @@ function HabitMetrics() {
 // ─── Main Metrics Page ────────────────────────────────────────────────────────
 
 export default function Metrics() {
-  const [todos, setTodos] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    api.getTodos()
-      .then((data) => {
-        // Pending first, then done
-        const sorted = [
-          ...data.todos.filter((t) => t.status === 'pending'),
-          ...data.todos.filter((t) => t.status === 'done'),
-        ];
-        setTodos(sorted);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+  const { data, isLoading } = useQuery({
+    queryKey: ['todos', 'all'],
+    queryFn: () => api.getTodos().then((d) => [
+      ...d.todos.filter((t) => t.status === 'pending'),
+      ...d.todos.filter((t) => t.status === 'done'),
+    ]),
+  });
+  const todos = data ?? [];
 
   return (
     <div className="metrics-page">
@@ -232,15 +237,15 @@ export default function Metrics() {
         <div className="metrics-card">
           <h2 className="metrics-section-title">Sessions by Todo</h2>
           <p className="metrics-hint">Click a todo to see its sessions and total time.</p>
-          {loading && <p className="empty-state">Loading…</p>}
-          {!loading && todos.length === 0 && (
+          {isLoading && <p className="empty-state">Loading…</p>}
+          {!isLoading && todos.length === 0 && (
             <p className="empty-state">No todos yet.</p>
           )}
-          {!loading && todos.map((todo) => (
+          {!isLoading && todos.map((todo) => (
             <TodoSessionRow
               key={todo.id}
               todo={todo}
-              onDelete={(id) => setTodos((prev) => prev.filter((t) => t.id !== id))}
+              onDelete={(id) => queryClient.setQueryData(['todos', 'all'], (old = []) => old.filter((t) => t.id !== id))}
             />
           ))}
         </div>

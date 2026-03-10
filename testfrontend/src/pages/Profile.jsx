@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 
 // Module-level key counter — gives every list item a stable, unique React key
@@ -74,37 +75,36 @@ export default function Profile() {
   const [projects, setProjects]       = useState([]);
   const [experiences, setExperiences] = useState([]);
   const [skills, setSkills]           = useState('');
-  const [loading, setLoading]         = useState(true);
   const [saving, setSaving]           = useState(false);
   const [saveMsg, setSaveMsg]         = useState('');   // '' | 'saved' | error text
   const [authError, setAuthError]     = useState(false);
-  const [emailStatus, setEmailStatus] = useState(null); // null | { connected, email }
 
+  const { data: profileData, isLoading } = useQuery({
+    queryKey: ['profile'],
+    queryFn: () => api.getProfile().catch(() => null),
+  });
+
+  const { data: emailStatus = null } = useQuery({
+    queryKey: ['emailStatus'],
+    queryFn: () => api.getEmailStatus().catch(() => ({ connected: false })),
+  });
+
+  // Seed form state when profile data loads
   useEffect(() => {
-    // Check for ?auth_error=true from OAuth redirect
+    if (!profileData) return;
+    setProjects((profileData.projects || []).map(fromApiProject));
+    setExperiences((profileData.experiences || []).map(fromApiExp));
+    setSkills(profileData.skills || '');
+  }, [profileData]);
+
+  // Handle ?auth_error=true from OAuth redirect
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('auth_error') === 'true') {
       setAuthError(true);
-      // Clean the URL param without reload
-      const clean = window.location.pathname;
-      window.history.replaceState({}, '', clean);
+      window.history.replaceState({}, '', window.location.pathname);
       setTimeout(() => setAuthError(false), 5000);
     }
-
-    api.getProfile()
-      .then((data) => {
-        setProjects((data.projects || []).map(fromApiProject));
-        setExperiences((data.experiences || []).map(fromApiExp));
-        setSkills(data.skills || '');
-      })
-      .catch(() => {
-        // 404 = profile row not seeded yet — just leave empty state
-      })
-      .finally(() => setLoading(false));
-
-    api.getEmailStatus()
-      .then((data) => { console.log('[email status]', data); setEmailStatus(data); })
-      .catch((err) => { console.error('[email status error]', err); setEmailStatus({ connected: false }); });
   }, []);
 
   // ── Projects ─────────────────────────────────────────────
@@ -143,7 +143,7 @@ export default function Profile() {
     }
   }
 
-  if (loading) return <div className="page"><p className="empty-state">Loading...</p></div>;
+  if (isLoading) return <div className="page"><p className="empty-state">Loading...</p></div>;
 
   const isError = saveMsg && saveMsg !== 'saved';
 

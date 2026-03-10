@@ -1,6 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
+
+const AI_ACTIVE = ['summarizing', 'analyzing', 'generating_resume'];
 
 const BORDER_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#14b8a6'];
 
@@ -58,7 +61,7 @@ function ScoreCircle({ score }) {
 const EMPTY_FORM = { title: '', company: '', status: 'saved', link: '', description: '' };
 
 export default function Jobs() {
-  const [jobs, setJobs]                   = useState([]);
+  const queryClient = useQueryClient();
   const [expandedIds, setExpandedIds]     = useState([]);
   const [jobDetails, setJobDetails]       = useState({});
   const [showAddForm, setShowAddForm]     = useState(false);
@@ -72,7 +75,13 @@ export default function Jobs() {
   // planEdits[jobId] = { exp: { [idx]: bool }, proj: { [idx]: bool } }
   // true = apply swap, false = revert to keep
   const [planEdits, setPlanEdits]            = useState({});
-  const pollingRef = useRef({});
+
+  const { data: jobs = [] } = useQuery({
+    queryKey: ['jobs'],
+    queryFn: () => api.getJobs().then((d) => d.jobs),
+    refetchInterval: (query) =>
+      query.state.data?.some((j) => AI_ACTIVE.includes(j.analysis_status)) ? 3000 : false,
+  });
 
   function initPlanEdits(jobId, suggestions) {
     if (!suggestions || Array.isArray(suggestions)) return;
@@ -131,46 +140,6 @@ export default function Jobs() {
     return { experience_plan, project_plan };
   }
 
-  // Initial load
-  useEffect(() => {
-    api.getJobs().then((data) => {
-      setJobs(data.jobs);
-      data.jobs.forEach((j) => {
-        if (['summarizing', 'analyzing', 'generating_resume'].includes(j.analysis_status)) {
-          startPolling(j.id);
-        }
-      });
-    });
-    return () => {
-      Object.values(pollingRef.current).forEach(clearInterval);
-    };
-  }, []);
-
-  function startPolling(jobId) {
-    if (pollingRef.current[jobId]) return;
-    const intervalId = setInterval(async () => {
-      try {
-        const detail = await api.getJob(jobId);
-        setJobs((prev) =>
-          prev.map((j) =>
-            j.id === jobId
-              ? { ...j, analysis_status: detail.analysis_status, summary: detail.summary, keywords: detail.keywords }
-              : j
-          )
-        );
-        setJobDetails((prev) => ({ ...prev, [jobId]: detail }));
-        initPlanEdits(jobId, detail.suggestions);
-        if (!['summarizing', 'analyzing', 'generating_resume'].includes(detail.analysis_status)) {
-          clearInterval(pollingRef.current[jobId]);
-          delete pollingRef.current[jobId];
-        }
-      } catch {
-        // Network error — keep polling
-      }
-    }, 3000);
-    pollingRef.current[jobId] = intervalId;
-  }
-
   async function toggleExpand(jobId) {
     if (expandedIds.includes(jobId)) {
       setExpandedIds((prev) => prev.filter((id) => id !== jobId));
@@ -186,7 +155,9 @@ export default function Jobs() {
 
   async function handleStatusChange(jobId, status) {
     const updated = await api.updateJob(jobId, { status });
-    setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, status: updated.status } : j)));
+    queryClient.setQueryData(['jobs'], (old = []) =>
+      old.map((j) => (j.id === jobId ? { ...j, status: updated.status } : j))
+    );
     setJobDetails((prev) =>
       prev[jobId] ? { ...prev, [jobId]: { ...prev[jobId], status: updated.status } } : prev
     );
@@ -195,9 +166,7 @@ export default function Jobs() {
   async function handleDelete(jobId) {
     if (!window.confirm('Delete this job?')) return;
     await api.deleteJob(jobId);
-    clearInterval(pollingRef.current[jobId]);
-    delete pollingRef.current[jobId];
-    setJobs((prev) => prev.filter((j) => j.id !== jobId));
+    queryClient.setQueryData(['jobs'], (old = []) => old.filter((j) => j.id !== jobId));
     setExpandedIds((prev) => prev.filter((id) => id !== jobId));
     setJobDetails((prev) => { const n = { ...prev }; delete n[jobId]; return n; });
     if (analyzePickerId === jobId) setAnalyzePickerId(null);
@@ -216,12 +185,9 @@ export default function Jobs() {
         ...(form.description.trim() && { description: form.description.trim() }),
       };
       const job = await api.createJob(payload);
-      setJobs((prev) => [job, ...prev]);
+      queryClient.setQueryData(['jobs'], (old = []) => [job, ...old]);
       setShowAddForm(false);
       setForm(EMPTY_FORM);
-      if (['summarizing', 'analyzing'].includes(job.analysis_status)) {
-        startPolling(job.id);
-      }
     } catch (err) {
       setFormError(err.message);
     } finally {
@@ -244,10 +210,9 @@ export default function Jobs() {
       const detail = jobDetails[jobId];
       const plan = buildEffectivePlan(jobId, detail?.suggestions);
       await api.generateResume(jobId, plan);
-      setJobs((prev) =>
-        prev.map((j) => (j.id === jobId ? { ...j, analysis_status: 'generating_resume' } : j))
+      queryClient.setQueryData(['jobs'], (old = []) =>
+        old.map((j) => (j.id === jobId ? { ...j, analysis_status: 'generating_resume' } : j))
       );
-      startPolling(jobId);
     } catch (err) {
       alert(err.message);
     } finally {
@@ -260,9 +225,8 @@ export default function Jobs() {
     setActionLoading((prev) => ({ ...prev, [jobId]: true }));
     try {
       await api.analyzeJob(jobId, parseInt(selectedDocId));
-      // Optimistically mark analyzing so the badge shows immediately
-      setJobs((prev) =>
-        prev.map((j) => (j.id === jobId ? { ...j, analysis_status: 'analyzing' } : j))
+      queryClient.setQueryData(['jobs'], (old = []) =>
+        old.map((j) => (j.id === jobId ? { ...j, analysis_status: 'analyzing' } : j))
       );
       const detail = await api.getJob(jobId);
       setJobDetails((prev) => ({
@@ -271,7 +235,6 @@ export default function Jobs() {
       }));
       setPlanEdits((prev) => { const n = { ...prev }; delete n[jobId]; return n; });
       setAnalyzePickerId(null);
-      startPolling(jobId);
     } catch (err) {
       alert(err.message);
     } finally {

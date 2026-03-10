@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -19,7 +20,6 @@ function getDayLabel(dateStr) {
   return DAY_LABELS[new Date(dateStr + 'T12:00:00').getDay()];
 }
 
-// Returns Mon–Sun of the current week as date strings
 function getCurrentWeekDates() {
   const today = new Date();
   const dow = today.getDay();
@@ -33,42 +33,57 @@ function getCurrentWeekDates() {
 }
 
 export default function HabitTracker() {
-  const [data, setData] = useState(null);
   const [newHabit, setNewHabit] = useState('');
   const [frequency, setFrequency] = useState(7);
-  const [adding, setAdding] = useState(false);
+  const queryClient = useQueryClient();
+  const QUERY_KEY = ['habitLogs', 7];
 
-  async function load() {
-    const d = await api.getHabitLogs(7, getTodayStr());
-    setData(d);
-  }
+  const { data } = useQuery({
+    queryKey: QUERY_KEY,
+    queryFn: () => api.getHabitLogs(7, getTodayStr()),
+  });
 
-  useEffect(() => { load(); }, []);
+  const toggleMutation = useMutation({
+    mutationFn: ({ habitId, dateStr }) => api.toggleHabitLog(habitId, dateStr),
+    onMutate: async ({ habitId, dateStr }) => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEY });
+      const prev = queryClient.getQueryData(QUERY_KEY);
+      queryClient.setQueryData(QUERY_KEY, (old) => ({
+        ...old,
+        habits: old.habits.map((h) =>
+          h.id !== habitId ? h : {
+            ...h,
+            grid: h.grid.map((c) =>
+              c.date === dateStr ? { ...c, completed: !c.completed } : c
+            ),
+          }
+        ),
+      }));
+      return { prev };
+    },
+    onError: (_, __, ctx) => queryClient.setQueryData(QUERY_KEY, ctx.prev),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
+  });
 
-  async function handleToggle(habitId, dateStr) {
-    await api.toggleHabitLog(habitId, dateStr);
-    load();
-  }
-
-  async function handleAdd(e) {
-    e.preventDefault();
-    if (!newHabit.trim()) return;
-    setAdding(true);
-    try {
-      await api.createHabit(newHabit.trim(), frequency);
+  const addMutation = useMutation({
+    mutationFn: ({ name, freq }) => api.createHabit(name, freq),
+    onSuccess: () => {
       setNewHabit('');
       setFrequency(7);
-      load();
-    } finally {
-      setAdding(false);
-    }
-  }
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+    },
+  });
 
   const today = getTodayStr();
   const weekDates = getCurrentWeekDates();
-
   const dailyHabits = data?.habits.filter((h) => h.frequency === 7) ?? [];
   const weeklyHabits = data?.habits.filter((h) => h.frequency < 7) ?? [];
+
+  function handleAdd(e) {
+    e.preventDefault();
+    if (!newHabit.trim()) return;
+    addMutation.mutate({ name: newHabit.trim(), freq: frequency });
+  }
 
   return (
     <div className="habit-tracker">
@@ -101,7 +116,7 @@ export default function HabitTracker() {
                     <button
                       key={d}
                       className={`habit-cell habit-cell-daily${gridMap[d] ? ' habit-cell-done-daily' : ''}`}
-                      onClick={() => handleToggle(habit.id, d)}
+                      onClick={() => toggleMutation.mutate({ habitId: habit.id, dateStr: d })}
                       title={d}
                     />
                   ))}
@@ -142,7 +157,7 @@ export default function HabitTracker() {
                       <button
                         key={d}
                         className={`habit-cell habit-cell-weekly${gridMap[d] ? ' habit-cell-done-weekly' : ''}${future ? ' habit-cell-future' : ''}`}
-                        onClick={() => !future && handleToggle(habit.id, d)}
+                        onClick={() => !future && toggleMutation.mutate({ habitId: habit.id, dateStr: d })}
                         disabled={future}
                         title={d}
                       />
@@ -179,8 +194,8 @@ export default function HabitTracker() {
             <option key={n} value={n}>{n}×/wk</option>
           ))}
         </select>
-        <button className="btn btn-primary btn-sm" type="submit" disabled={adding}>
-          {adding ? '…' : '+'}
+        <button className="btn btn-primary btn-sm" type="submit" disabled={addMutation.isPending}>
+          {addMutation.isPending ? '…' : '+'}
         </button>
       </form>
     </div>
