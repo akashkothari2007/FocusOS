@@ -46,7 +46,12 @@ import os
 @app.middleware("http")
 async def api_key_middleware(request: Request, call_next):
 
+    EXEMPT_PATHS = ["/auth/login", "/auth/callback", "/health", "/db"]
     
+    if request.url.path in EXEMPT_PATHS:
+        return await call_next(request)
+
+
     key = request.headers.get("X-API-Key")
     if key != os.environ.get("FOCUSOS_API_KEY"):
         return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
