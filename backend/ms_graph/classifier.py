@@ -24,19 +24,18 @@ async def classify_emails(emails: list[dict]) -> list[dict]:
 
         messages = email_classifier_messages(subject, sender, preview)
         result = chat_json(messages)
-
+    
         if result.get("is_task"):
-            log.info(f"Task found: [{result.get('priority')}] {result.get('suggested_title')}")
+            log.info(f"Task: [{result.get('priority')}] {result.get('suggested_title')}")
             tasks.append({
                 "email_id": email.get("id"),
                 "subject": subject,
                 "sender": sender,
                 "suggested_title": result.get("suggested_title"),
-                "priority": result.get("priority", "medium"),
-                "reason": result.get("reason"),
+                "web_link": email.get("webLink"),
             })
         else:
-            log.info(f"Skipped: {subject[:50]} — {result.get('reason')}")
+            log.info(f"Skipped: {subject[:60]}")
 
     log.info(f"Classified {len(tasks)} tasks from {len(emails)} emails")
     return tasks

@@ -30,3 +30,7 @@ class UpdateTodo(BaseModel):
     subtasks: Optional[List[Subtask]] = None
     links: Optional[List[Link]] = None
     due_date: Optional[datetime] = None
+
+
+class ReorderTodos(BaseModel):
+    ids: List[int]

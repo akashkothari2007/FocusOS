@@ -2,7 +2,7 @@ import json
 from fastapi import APIRouter, HTTPException
 from typing import Optional, Literal
 from db import get_conn
-from models.todo_models import CreateTodo, UpdateTodo, Link
+from models.todo_models import CreateTodo, UpdateTodo, Link, ReorderTodos
 
 router = APIRouter(prefix="/api/v1")
 
@@ -14,11 +14,11 @@ def get_todos(status: Optional[Literal["pending", "done"]] = None):
         with conn.cursor() as cur:
             if status:
                 cur.execute(
-                    "SELECT * FROM todos WHERE status = %s ORDER BY due_date ASC NULLS LAST;",
+                    "SELECT * FROM todos WHERE status = %s ORDER BY (due_date IS NULL) ASC, due_date ASC, sort_order ASC;",
                     (status,)
                 )
             else:
-                cur.execute("SELECT * FROM todos ORDER BY due_date ASC NULLS LAST;")
+                cur.execute("SELECT * FROM todos ORDER BY (due_date IS NULL) ASC, due_date ASC, sort_order ASC;")
             rows = cur.fetchall()
     return {"todos": rows}
 
@@ -39,6 +39,24 @@ def create_todo(todo: CreateTodo):
             )
             row = cur.fetchone()
     return row
+
+
+# reorder undated todos
+@router.post("/todos/reorder")
+def reorder_todos(body: ReorderTodos):
+    ids = body.ids
+    orders = [i * 10 for i in range(len(ids))]
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE todos SET sort_order = v.ord
+                FROM (SELECT unnest(%s::int[]) AS id, unnest(%s::int[]) AS ord) AS v
+                WHERE todos.id = v.id
+                """,
+                (ids, orders)
+            )
+    return {"ok": True}
 
 
 # update a todo

@@ -300,21 +300,12 @@ def email_classifier_messages(subject: str, sender: str, preview: str) -> list[d
         {
             "role": "user",
             "content": (
-                "Classify this email. Is it something I need to actually do?\n\n"
-                f"From: {sender}\n"
-                f"Subject: {subject}\n"
-                f"Preview: {preview}\n\n"
-                "Rules:\n"
-                "- is_task=true if: assignment due, interview to schedule, form to fill, something my dad/family sent asking me to do something, "
-                "deadline reminder, application follow-up requiring a reply, any clear actionable request\n"
-                "- is_task=false if: newsletters, promotions, LinkedIn notifications, "
-                "'someone viewed your profile', automated receipts, someone is waiting for you on LinkedIn, "
-                "general FYI emails with nothing to do\n"
-                "- priority: 'high' if deadline within 3 days or interview/urgent request, "
-                "'medium' for normal tasks, 'low' for optional/low-stakes\n"
-                "- suggested_title: short actionable title like 'Schedule interview with Shopify' or 'Submit ECE assignment 2'\n"
-                "- reason: one sentence explaining your decision\n\n"
-                'Return JSON: {"is_task": true/false, "suggested_title": "...", "priority": "high/medium/low", "reason": "..."}'
+                f"From: {sender}\nSubject: {subject}\nPreview: {preview}\n\n"
+                "is_task=true ONLY if there is a clear action required: interview to schedule, assignment/form due, "
+                "explicit request from a real person, deadline reminder, application reply needed.\n"
+                "is_task=false for: newsletters, promotions, LinkedIn notifications, receipts, automated alerts, FYI-only emails.\n"
+                "suggested_title: short imperative like 'Schedule interview with Shopify' or 'Submit ECE assignment 2'.\n"
+                'Return JSON: {"is_task": true/false, "suggested_title": "..."}'
             ),
         },
     ]

@@ -6,6 +6,8 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from db import get_conn
 from routers import todo_router, session_router, job_router, doc_router, profile_router, habit_router, email_router
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from scheduler import run_email_scan
 
 logging.basicConfig(
     level=logging.INFO,
@@ -24,6 +26,25 @@ app.add_middleware(
 #-----Load Environment Variables-----
 from dotenv import load_dotenv
 load_dotenv()
+
+#-----Scheduler-----
+scheduler = AsyncIOScheduler()
+
+@app.on_event("startup")
+async def start_scheduler():
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS scanned_email_ids (
+                    email_id TEXT PRIMARY KEY,
+                    scanned_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            """)
+        conn.commit()
+
+    scheduler.add_job(run_email_scan, "cron", hour=8, timezone="America/New_York")
+    scheduler.add_job(run_email_scan, "cron", hour=18, timezone="America/New_York")
+    scheduler.start()
 
 #-----Health Checks-----
 
