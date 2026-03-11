@@ -74,6 +74,7 @@ export default function Todos({ activeSession, setActiveSession }) {
   }
 
   function handleUpdate(updatedTodo) {
+    queryClient.cancelQueries({ queryKey: ['todos', 'pending'] });
     queryClient.setQueryData(['todos', 'pending'], (old = []) =>
       old.map((t) => (t.id === updatedTodo.id ? updatedTodo : t))
     );
