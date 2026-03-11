@@ -1,4 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { api } from '../api';
 
 function formatDate(dt) {
@@ -6,7 +20,6 @@ function formatDate(dt) {
   return new Date(dt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-// psycopg returns JSONB as a parsed object, but handle string just in case
 function parseSubtasks(raw) {
   if (!raw) return [];
   if (Array.isArray(raw)) return raw;
@@ -35,17 +48,50 @@ function LinkIcon({ size = 14 }) {
   );
 }
 
-export default function TodoCard({ todo, borderColor, isActiveSession, onStartSession, onMarkDone, onUpdate }) {
+function SortableSubtaskRow({ subtask, index, onToggle, onDelete }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: subtask.id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`subtask-row${isDragging ? ' subtask-dragging' : ''}`}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+        zIndex: isDragging ? 10 : 'auto',
+      }}
+    >
+      <span className="subtask-drag-handle" {...attributes} {...listeners}>⠿</span>
+      <input
+        type="checkbox"
+        checked={subtask.status === 'done'}
+        onChange={() => onToggle(subtask.id)}
+      />
+      <span className={subtask.status === 'done' ? 'subtask-done' : ''}>{subtask.title}</span>
+      <button
+        className="subtask-delete"
+        onClick={() => onDelete(index)}
+        title="Delete subtask"
+      >×</button>
+    </div>
+  );
+}
+
+export default function TodoCard({ todo, borderColor, isActiveSession, onStartSession, onMarkDone, onUpdate, dragHandleProps }) {
   const [expanded, setExpanded] = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
   const [desc, setDesc] = useState(todo.description || '');
   const [newSubtask, setNewSubtask] = useState('');
-  const [draggingIdx, setDraggingIdx] = useState(null);
-  const [dragOverIdx, setDragOverIdx] = useState(null);
   const [linksOpen, setLinksOpen] = useState(false);
   const [newLinkUrl, setNewLinkUrl] = useState('');
   const [newLinkLabel, setNewLinkLabel] = useState('');
   const linksRef = useRef(null);
+
+  const subtaskSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
+  );
 
   const subtasks = parseSubtasks(todo.subtasks);
   const links = parseLinks(todo.links);
@@ -100,36 +146,11 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
     applySubtasks(subtasks.filter((_, i) => i !== index));
   }
 
-  function handleDragStart(e, index) {
-    setDraggingIdx(index);
-    e.dataTransfer.effectAllowed = 'move';
-  }
-
-  function handleDragOver(e, index) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setDragOverIdx(index);
-  }
-
-  function handleDrop(e, targetIndex) {
-    e.preventDefault();
-    if (draggingIdx === null || draggingIdx === targetIndex) {
-      setDraggingIdx(null);
-      setDragOverIdx(null);
-      return;
-    }
-    const reordered = [...subtasks];
-    const [moved] = reordered.splice(draggingIdx, 1);
-    const insertAt = draggingIdx < targetIndex ? targetIndex - 1 : targetIndex;
-    reordered.splice(insertAt, 0, moved);
-    setDraggingIdx(null);
-    setDragOverIdx(null);
-    applySubtasks(reordered);
-  }
-
-  function handleDragEnd() {
-    setDraggingIdx(null);
-    setDragOverIdx(null);
+  function handleSubtaskDragEnd({ active, over }) {
+    if (!over || active.id === over.id) return;
+    const oldIdx = subtasks.findIndex((s) => s.id === active.id);
+    const newIdx = subtasks.findIndex((s) => s.id === over.id);
+    applySubtasks(arrayMove(subtasks, oldIdx, newIdx));
   }
 
   function handleAddSubtask(e) {
@@ -169,8 +190,12 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
   }
 
   return (
-    <div className="todo-card" style={{ borderLeftColor: borderColor }}>
-      <div className="todo-card-header" onClick={() => setExpanded((v) => !v)}>
+    <div className="todo-card" style={{ borderLeftColor: borderColor, position: 'relative', zIndex: linksOpen ? 100 : 'auto' }}>
+      <div
+        className={`todo-card-header${dragHandleProps ? ' todo-card-header--draggable' : ''}`}
+        onClick={() => setExpanded((v) => !v)}
+        {...(dragHandleProps || {})}
+      >
         <div className="todo-card-title-row">
           <span className="todo-title">{todo.title}</span>
           {todo.due_date && <span className="due-date">{formatDate(todo.due_date)}</span>}
@@ -258,34 +283,26 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
           )}
 
           <div className="subtasks">
-            {subtasks.map((s, i) => (
-              <div
-                key={s.id}
-                className={[
-                  'subtask-row',
-                  draggingIdx === i ? 'subtask-dragging' : '',
-                  dragOverIdx === i && draggingIdx !== i ? 'subtask-drag-over' : '',
-                ].join(' ').trim()}
-                draggable
-                onDragStart={(e) => handleDragStart(e, i)}
-                onDragOver={(e) => handleDragOver(e, i)}
-                onDrop={(e) => handleDrop(e, i)}
-                onDragEnd={handleDragEnd}
+            <DndContext
+              sensors={subtaskSensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleSubtaskDragEnd}
+            >
+              <SortableContext
+                items={subtasks.map((s) => s.id)}
+                strategy={verticalListSortingStrategy}
               >
-                <span className="subtask-drag-handle">⠿</span>
-                <input
-                  type="checkbox"
-                  checked={s.status === 'done'}
-                  onChange={() => toggleSubtask(s.id)}
-                />
-                <span className={s.status === 'done' ? 'subtask-done' : ''}>{s.title}</span>
-                <button
-                  className="subtask-delete"
-                  onClick={() => deleteSubtask(i)}
-                  title="Delete subtask"
-                >×</button>
-              </div>
-            ))}
+                {subtasks.map((s, i) => (
+                  <SortableSubtaskRow
+                    key={s.id}
+                    subtask={s}
+                    index={i}
+                    onToggle={toggleSubtask}
+                    onDelete={deleteSubtask}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
             <form className="add-subtask-form" onSubmit={handleAddSubtask}>
               <input
                 className="input input-sm"

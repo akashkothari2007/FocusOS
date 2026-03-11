@@ -26,6 +26,9 @@ export const api = {
   deleteTodo: (id) =>
     request(`/api/v1/todos/${id}`, { method: 'DELETE' }),
 
+  reorderTodos: (ids) =>
+    request('/api/v1/todos/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
+
   getSessions: (todoId) =>
     request(`/api/v1/todos/${todoId}/sessions`),
 
