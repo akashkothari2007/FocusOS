@@ -20,6 +20,7 @@ function getDayLabel(dateStr) {
   return DAY_LABELS[new Date(dateStr + 'T12:00:00').getDay()];
 }
 
+
 function getCurrentWeekDates() {
   const today = new Date();
   const dow = today.getDay();
@@ -48,16 +49,28 @@ export default function HabitTracker() {
     onMutate: async ({ habitId, dateStr }) => {
       await queryClient.cancelQueries({ queryKey: QUERY_KEY });
       const prev = queryClient.getQueryData(QUERY_KEY);
+      const today = getTodayStr();
+      const weekDates = getCurrentWeekDates();
       queryClient.setQueryData(QUERY_KEY, (old) => ({
         ...old,
-        habits: old.habits.map((h) =>
-          h.id !== habitId ? h : {
+        habits: old.habits.map((h) => {
+          if (h.id !== habitId) return h;
+          const wasCompleted = h.grid.find((c) => c.date === dateStr)?.completed ?? false;
+          const inWeek = weekDates.includes(dateStr);
+          const newGrid = h.grid.map((c) =>
+            c.date === dateStr ? { ...c, completed: !c.completed } : c
+          );
+          const isToday = dateStr === today;
+          const streakDelta = isToday ? (wasCompleted ? -1 : 1) : 0;
+          return {
             ...h,
-            grid: h.grid.map((c) =>
-              c.date === dateStr ? { ...c, completed: !c.completed } : c
-            ),
-          }
-        ),
+            grid: newGrid,
+            streak: Math.max(0, h.streak + streakDelta),
+            week_count: inWeek
+              ? Math.max(0, h.week_count + (wasCompleted ? -1 : 1))
+              : h.week_count,
+          };
+        }),
       }));
       return { prev };
     },

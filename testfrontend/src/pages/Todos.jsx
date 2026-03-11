@@ -36,13 +36,23 @@ export default function Todos({ activeSession, setActiveSession }) {
       await api.endSession(activeSession.sessionId, null);
     }
 
-    const session = await api.startSession(todo.id);
     setActiveSession({
-      sessionId: session.id,
+      sessionId: null,
       todoId: todo.id,
       todoTitle: todo.title,
-      startedAt: session.started_at,
+      startedAt: new Date().toISOString(),
     });
+    try {
+      const session = await api.startSession(todo.id);
+      setActiveSession({
+        sessionId: session.id,
+        todoId: todo.id,
+        todoTitle: todo.title,
+        startedAt: session.started_at,
+      });
+    } catch {
+      setActiveSession(null);
+    }
   }
 
   return (

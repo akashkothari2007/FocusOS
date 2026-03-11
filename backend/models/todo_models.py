@@ -9,6 +9,12 @@ class Subtask(BaseModel):
     status: Literal["pending", "done"] = "pending"
 
 
+class Link(BaseModel):
+    id: int
+    url: str
+    label: Optional[str] = None
+
+
 #title is required, everything else optional
 class CreateTodo(BaseModel):
     title: str
@@ -22,4 +28,5 @@ class UpdateTodo(BaseModel):
     description: Optional[str] = None
     status: Optional[Literal["pending", "done"]] = None
     subtasks: Optional[List[Subtask]] = None
+    links: Optional[List[Link]] = None
     due_date: Optional[datetime] = None

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { api } from '../api';
 
 function formatDate(dt) {
@@ -13,16 +13,53 @@ function parseSubtasks(raw) {
   try { return JSON.parse(raw); } catch { return []; }
 }
 
+function parseLinks(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  try { return JSON.parse(raw); } catch { return []; }
+}
+
+function ensureUrl(val) {
+  const s = val.trim();
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) return s;
+  return `https://${s}`;
+}
+
+function LinkIcon({ size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+    </svg>
+  );
+}
+
 export default function TodoCard({ todo, borderColor, isActiveSession, onStartSession, onMarkDone, onUpdate }) {
   const [expanded, setExpanded] = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
   const [desc, setDesc] = useState(todo.description || '');
   const [newSubtask, setNewSubtask] = useState('');
-  const [loading, setLoading] = useState(false);
   const [draggingIdx, setDraggingIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
+  const [linksOpen, setLinksOpen] = useState(false);
+  const [newLinkUrl, setNewLinkUrl] = useState('');
+  const [newLinkLabel, setNewLinkLabel] = useState('');
+  const linksRef = useRef(null);
 
   const subtasks = parseSubtasks(todo.subtasks);
+  const links = parseLinks(todo.links);
+
+  useEffect(() => {
+    if (!linksOpen) return;
+    function onMouseDown(e) {
+      if (linksRef.current && !linksRef.current.contains(e.target)) {
+        setLinksOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [linksOpen]);
 
   async function saveDescription() {
     setEditingDesc(false);
@@ -38,6 +75,13 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
   function applySubtasks(newSubtasks) {
     onUpdate({ ...todo, subtasks: newSubtasks });
     api.updateTodo(todo.id, { subtasks: newSubtasks })
+      .then(onUpdate)
+      .catch(() => onUpdate(todo));
+  }
+
+  function applyLinks(newLinks) {
+    onUpdate({ ...todo, links: newLinks });
+    api.updateTodo(todo.id, { links: newLinks })
       .then(onUpdate)
       .catch(() => onUpdate(todo));
   }
@@ -100,14 +144,23 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
     ]);
   }
 
-  async function handleMarkDone() {
-    setLoading(true);
-    try {
-      await api.updateTodo(todo.id, { status: 'done' });
-      onMarkDone(todo.id);
-    } finally {
-      setLoading(false);
-    }
+  function handleAddLink(e) {
+    e.preventDefault();
+    if (!newLinkUrl.trim()) return;
+    const url = ensureUrl(newLinkUrl);
+    const nextId = links.length > 0 ? Math.max(...links.map((l) => l.id)) + 1 : 1;
+    setNewLinkUrl('');
+    setNewLinkLabel('');
+    applyLinks([...links, { id: nextId, url, label: newLinkLabel.trim() || null }]);
+  }
+
+  function deleteLink(linkId) {
+    applyLinks(links.filter((l) => l.id !== linkId));
+  }
+
+  function handleMarkDone() {
+    onMarkDone(todo.id);
+    api.updateTodo(todo.id, { status: 'done' });
   }
 
   function handlePlayClick(e) {
@@ -121,6 +174,62 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
         <div className="todo-card-title-row">
           <span className="todo-title">{todo.title}</span>
           {todo.due_date && <span className="due-date">{formatDate(todo.due_date)}</span>}
+        </div>
+        <div className="links-btn-wrap" ref={linksRef}>
+          <button
+            className={`btn-links${linksOpen ? ' active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setLinksOpen((v) => !v); }}
+            title={links.length > 0 ? `${links.length} link${links.length !== 1 ? 's' : ''}` : 'Add links'}
+          >
+            <LinkIcon size={14} />
+            {links.length > 0 && <span className="links-badge">{links.length}</span>}
+          </button>
+          {linksOpen && (
+            <div className="links-dropdown" onClick={(e) => e.stopPropagation()}>
+              <span className="links-dropdown-title">Links</span>
+              {links.length === 0 ? (
+                <p className="links-empty">No links yet — add one below.</p>
+              ) : (
+                <div className="links-list">
+                  {links.map((link) => (
+                    <div key={link.id} className="link-item">
+                      <span className="link-item-icon"><LinkIcon size={12} /></span>
+                      <div className="link-item-text">
+                        {link.label && <span className="link-item-label">{link.label}</span>}
+                        <a
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`link-item-url${!link.label ? ' solo' : ''}`}
+                        >
+                          {link.url.replace(/^https?:\/\//, '')}
+                        </a>
+                      </div>
+                      <button className="link-delete" onClick={() => deleteLink(link.id)} title="Remove">×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="links-divider" />
+              <form className="links-add-form" onSubmit={handleAddLink}>
+                <input
+                  className="input input-sm"
+                  placeholder="Paste a URL…"
+                  value={newLinkUrl}
+                  onChange={(e) => setNewLinkUrl(e.target.value)}
+                />
+                <div className="links-add-row">
+                  <input
+                    className="input input-sm"
+                    placeholder="Label (optional)"
+                    value={newLinkLabel}
+                    onChange={(e) => setNewLinkLabel(e.target.value)}
+                  />
+                  <button type="submit" className="btn-add-link">Add</button>
+                </div>
+              </form>
+            </div>
+          )}
         </div>
         <button
           className={`btn-play${isActiveSession ? ' active-session' : ''}`}
@@ -188,9 +297,7 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
           </div>
 
           <div className="todo-card-footer">
-            <button className="btn btn-done" onClick={handleMarkDone} disabled={loading}>
-              {loading ? '…' : 'Mark done'}
-            </button>
+            <button className="btn btn-done" onClick={handleMarkDone}>Mark done</button>
           </div>
         </div>
       )}

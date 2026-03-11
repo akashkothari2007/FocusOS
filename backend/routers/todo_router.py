@@ -2,7 +2,7 @@ import json
 from fastapi import APIRouter, HTTPException
 from typing import Optional, Literal
 from db import get_conn
-from models.todo_models import CreateTodo, UpdateTodo
+from models.todo_models import CreateTodo, UpdateTodo, Link
 
 router = APIRouter(prefix="/api/v1")
 
@@ -48,9 +48,11 @@ def update_todo(todo_id: int, updates: UpdateTodo):
     if not fields:
         raise HTTPException(status_code=400, detail="No fields to update")
 
-    # subtasks needs JSON serialization if present
+    # subtasks and links need JSON serialization if present
     if "subtasks" in fields:
         fields["subtasks"] = json.dumps([s.model_dump() for s in updates.subtasks])
+    if "links" in fields:
+        fields["links"] = json.dumps([l.model_dump() for l in updates.links])
 
     set_clause = ", ".join(f"{k} = %s" for k in fields)  # e.g. "title = %s, status = %s"
     values = list(fields.values()) + [todo_id]

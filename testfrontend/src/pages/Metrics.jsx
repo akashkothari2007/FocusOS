@@ -37,11 +37,11 @@ function TodoSessionRow({ todo, onDelete }) {
     setExpanded((v) => !v);
   }
 
-  async function handleDelete(e) {
+  function handleDelete(e) {
     e.stopPropagation();
     if (!window.confirm(`Delete "${todo.title}" and all its sessions?`)) return;
-    await api.deleteTodo(todo.id);
     onDelete(todo.id);
+    api.deleteTodo(todo.id);
   }
 
   const totalSeconds = sessions
@@ -119,12 +119,25 @@ function HabitMetrics() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteHabit(id),
-    onSuccess: invalidateHabits,
+    onMutate: (id) => {
+      queryClient.setQueryData(['habits'], (old) =>
+        old ? { ...old, habits: old.habits.filter((h) => h.id !== id) } : old
+      );
+      queryClient.setQueryData(['habitLogs', 30], (old) =>
+        old ? { ...old, habits: old.habits.filter((h) => h.id !== id) } : old
+      );
+    },
+    onSettled: invalidateHabits,
   });
 
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, isActive }) => api.updateHabit(id, { is_active: !isActive }),
-    onSuccess: invalidateHabits,
+    onMutate: ({ id, isActive }) => {
+      queryClient.setQueryData(['habits'], (old) =>
+        old ? { ...old, habits: old.habits.map((h) => h.id === id ? { ...h, is_active: !isActive } : h) } : old
+      );
+    },
+    onSettled: invalidateHabits,
   });
 
   async function handleAdd(e) {
