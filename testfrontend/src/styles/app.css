@@ -181,22 +181,20 @@ body {
 /* ─── Todos Page Layout ───────────────────────────────────── */
 .todos-page {
   display: grid;
-  grid-template-columns: 185px 1fr 280px;
-  gap: 16px;
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 28px 20px;
+  grid-template-columns: 280px 1fr 280px;
+  gap: 14px;
+  padding: 28px 24px;
   align-items: start;
 }
 
-@media (max-width: 1050px) {
+@media (max-width: 960px) {
   .todos-page {
     grid-template-columns: 1fr 280px;
   }
   .today-strip { display: none; }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 680px) {
   .todos-page {
     grid-template-columns: 1fr;
   }
@@ -424,11 +422,12 @@ body {
   -webkit-backdrop-filter: blur(12px);
   border: 1.5px solid rgba(255, 255, 255, 0.8);
   border-radius: 18px;
-  padding: 18px 16px 14px;
+  padding: 16px 10px 12px;
   box-shadow: 0 4px 20px rgba(99, 102, 241, 0.07);
   display: flex;
   flex-direction: column;
   gap: 14px;
+  overflow: hidden;
 }
 
 .habit-tracker-title {
@@ -474,7 +473,7 @@ body {
 }
 
 .habit-name-col {
-  width: 90px;
+  width: 72px;
   flex-shrink: 0;
 }
 
@@ -484,7 +483,7 @@ body {
 }
 
 .habit-day-label {
-  width: 25px;
+  width: 20px;
   text-align: center;
   font-size: 10px;
   font-weight: 600;
@@ -502,7 +501,7 @@ body {
 }
 
 .habit-name-wrap {
-  width: 90px;
+  width: 72px;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -526,16 +525,22 @@ body {
 }
 
 /* ── Grid cells ── */
+.habit-day-labels-grid {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
 .habit-grid {
   display: flex;
-  gap: 3px;
+  gap: 2px;
   flex-shrink: 0;
 }
 
 .habit-cell {
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
   border: none;
   cursor: pointer;
   transition: background 0.15s, transform 0.1s;
@@ -564,11 +569,11 @@ body {
 
 /* Weekly progress badge */
 .habit-progress-badge {
-  margin-left: 6px;
+  margin-left: 4px;
   font-size: 11px;
   font-weight: 700;
   color: #0d9488;
-  min-width: 26px;
+  min-width: 22px;
   text-align: right;
   flex-shrink: 0;
 }
@@ -1498,31 +1503,7 @@ body {
   background: #e11d48;
 }
 
-/* ─── Session block delete X ──────────────────────────────── */
-.cal-block-delete {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  background: rgba(0, 0, 0, 0.35);
-  border: none;
-  color: #fff;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-  font-family: inherit;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.15s, background 0.12s;
-  z-index: 10;
-}
-.cal-block:hover .cal-block-delete { opacity: 1; }
-.cal-block-delete:hover { background: rgba(225, 29, 72, 0.85) !important; }
+/* ─── Session block delete X — removed; delete is in the popover only ─ */
 
 /* ─── Popover (shared by strip + calendar) ────────────────── */
 .sp-close {
@@ -1569,6 +1550,25 @@ body {
   font-size: 12px;
   color: #b0b8cc;
   font-style: italic;
+}
+
+.sp-delete-btn {
+  margin-top: 10px;
+  width: 100%;
+  padding: 6px 0;
+  background: rgba(225, 29, 72, 0.08);
+  border: 1px solid rgba(225, 29, 72, 0.2);
+  border-radius: 8px;
+  color: #e11d48;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.sp-delete-btn:hover {
+  background: rgba(225, 29, 72, 0.15);
+  border-color: rgba(225, 29, 72, 0.4);
 }
 
 /* ─── Calendar Page ───────────────────────────────────────── */

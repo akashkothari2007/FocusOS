@@ -109,11 +109,13 @@ export default function HabitTracker() {
 
           <div className="habit-day-labels">
             <div className="habit-name-col" />
-            {data.dates.map((d) => (
-              <div key={d} className={`habit-day-label${d === today ? ' habit-day-today-daily' : ''}`}>
-                {getDayLabel(d)}
-              </div>
-            ))}
+            <div className="habit-day-labels-grid">
+              {data.dates.map((d) => (
+                <div key={d} className={`habit-day-label${d === today ? ' habit-day-today-daily' : ''}`}>
+                  {getDayLabel(d)}
+                </div>
+              ))}
+            </div>
           </div>
 
           {dailyHabits.map((habit) => {
@@ -147,11 +149,13 @@ export default function HabitTracker() {
 
           <div className="habit-day-labels">
             <div className="habit-name-col" />
-            {weekDates.map((d, i) => (
-              <div key={d} className={`habit-day-label${d === today ? ' habit-day-today-weekly' : ''}`}>
-                {WEEK_DAY_LABELS[i]}
-              </div>
-            ))}
+            <div className="habit-day-labels-grid">
+              {weekDates.map((d, i) => (
+                <div key={d} className={`habit-day-label${d === today ? ' habit-day-today-weekly' : ''}`}>
+                  {WEEK_DAY_LABELS[i]}
+                </div>
+              ))}
+            </div>
             <div className="habit-badge-col" />
           </div>
 

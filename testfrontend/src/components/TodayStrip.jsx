@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 
@@ -286,11 +287,6 @@ export default function TodayStrip({ activeSession, setActiveSession }) {
                         {s.todo_title || s.title || 'Session'}
                       </span>
                     )}
-                    <button
-                      className="cal-block-delete"
-                      onClick={(e) => handleDelete(e, s)}
-                      title="Delete"
-                    >×</button>
                   </div>
                 );
               })}
@@ -299,8 +295,8 @@ export default function TodayStrip({ activeSession, setActiveSession }) {
         </div>
       </div>
 
-      {/* Fixed-position popover */}
-      {popover && (
+      {/* Fixed-position popover — portalled to body to escape stacking contexts */}
+      {popover && createPortal(
         <div
           className="session-popover-fixed"
           style={{
@@ -315,7 +311,16 @@ export default function TodayStrip({ activeSession, setActiveSession }) {
             ? <p className="sp-notes">{popover.session.notes}</p>
             : <p className="sp-notes-empty">No notes</p>
           }
-        </div>
+          <button
+            className="sp-delete-btn"
+            onClick={async (e) => {
+              e.stopPropagation();
+              await handleDelete(e, popover.session);
+              setPopover(null);
+            }}
+          >Delete session</button>
+        </div>,
+        document.body
       )}
     </div>
   );
