@@ -5,6 +5,7 @@ import Metrics from './pages/Metrics';
 import Jobs from './pages/Jobs';
 import Docs from './pages/Docs';
 import Profile from './pages/Profile';
+import Calendar from './pages/Calendar';
 import SessionBar from './components/SessionBar';
 import { api } from './api';
 import './styles/app.css';
@@ -58,6 +59,12 @@ export default function App() {
             Docs
           </NavLink>
           <NavLink
+            to="/calendar"
+            className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+          >
+            Calendar
+          </NavLink>
+          <NavLink
             to="/profile"
             className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
           >
@@ -80,6 +87,15 @@ export default function App() {
           <Route path="/metrics" element={<Metrics />} />
           <Route path="/jobs" element={<Jobs />} />
           <Route path="/docs" element={<Docs />} />
+          <Route
+            path="/calendar"
+            element={
+              <Calendar
+                activeSession={activeSession}
+                setActiveSession={setActiveSession}
+              />
+            }
+          />
           <Route path="/profile" element={<Profile />} />
         </Routes>
       </main>

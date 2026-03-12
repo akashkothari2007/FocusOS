@@ -121,6 +121,24 @@ export const api = {
       body: JSON.stringify({ habit_id: habitId, log_date: logDate }),
     }),
 
+  // Sessions (calendar/strip) — pass local→UTC bounds so timezone is correct
+  getTodaySessions: (localDateStr) => {
+    const s = new Date(localDateStr + 'T00:00:00');
+    const e = new Date(localDateStr + 'T00:00:00');
+    e.setDate(e.getDate() + 1);
+    return request(`/api/v1/sessions/today?start=${encodeURIComponent(s.toISOString())}&end=${encodeURIComponent(e.toISOString())}`);
+  },
+
+  getWeekSessions: (weekStartStr) => {
+    const s = new Date(weekStartStr + 'T00:00:00');
+    const e = new Date(weekStartStr + 'T00:00:00');
+    e.setDate(e.getDate() + 7);
+    return request(`/api/v1/sessions/week?start=${encodeURIComponent(s.toISOString())}&end=${encodeURIComponent(e.toISOString())}`);
+  },
+
+  startFreeformSession: (title) =>
+    request('/api/v1/sessions/start', { method: 'POST', body: JSON.stringify({ title }) }),
+
   // Email
   getEmailStatus: () =>
     request('/auth/status'),

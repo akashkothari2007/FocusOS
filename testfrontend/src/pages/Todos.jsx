@@ -19,6 +19,7 @@ import { api } from '../api';
 import AddTodoForm from '../components/AddTodoForm';
 import TodoCard from '../components/TodoCard';
 import HabitTracker from '../components/HabitTracker';
+import TodayStrip from '../components/TodayStrip';
 
 const BORDER_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#14b8a6'];
 const todoColor = (id) => BORDER_COLORS[id % BORDER_COLORS.length];
@@ -141,6 +142,7 @@ export default function Todos({ activeSession, setActiveSession }) {
 
   return (
     <div className="todos-page">
+      <TodayStrip activeSession={activeSession} setActiveSession={setActiveSession} />
       <div className="todos-main">
         <AddTodoForm />
         <div className="todo-list">
