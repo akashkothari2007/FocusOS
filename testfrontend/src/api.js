@@ -41,6 +41,9 @@ export const api = {
       body: JSON.stringify({ notes }),
     }),
 
+  deleteSession: (sessionId) =>
+    request(`/api/v1/sessions/${sessionId}`, { method: 'DELETE' }),
+
   // Jobs
   getJobs: (status) =>
     request(`/api/v1/jobs${status ? `?status=${status}` : ''}`),

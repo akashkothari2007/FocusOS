@@ -4,21 +4,18 @@ import { api } from '../api';
 
 const SESSION_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#14b8a6'];
 const FREEFORM_COLOR = '#8b5cf6';
+const HOUR_PX = 48;  // px per hour (0.8px per minute)
+const TOTAL_HEIGHT = 24 * HOUR_PX;
+const PPM = HOUR_PX / 60;  // pixels per minute
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 function sessionColor(s) {
   if (!s.todo_id) return FREEFORM_COLOR;
   return SESSION_COLORS[s.todo_id % SESSION_COLORS.length];
 }
 
-function fmtDuration(seconds) {
-  if (!seconds) return '0m';
-  const m = Math.floor(seconds / 60);
-  if (m < 60) return `${m}m`;
-  return `${Math.floor(m / 60)}h ${m % 60}m`;
-}
-
-function fmtElapsed(startedAt) {
-  const secs = Math.max(0, Math.floor((Date.now() - new Date(startedAt)) / 1000));
+function fmtElapsed(startedAt, nowMs) {
+  const secs = Math.max(0, Math.floor((nowMs - new Date(startedAt)) / 1000));
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
   const s = secs % 60;
@@ -40,38 +37,58 @@ function formatDayLabel(dateStr) {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+function formatHour(h) {
+  if (h === 0) return '12a';
+  if (h < 12) return `${h}a`;
+  if (h === 12) return '12p';
+  return `${h - 12}p`;
+}
+
+function getBlockStyle(session, nowMs) {
+  const start = new Date(session.started_at);
+  const startMin = start.getHours() * 60 + start.getMinutes();
+  let endMin;
+  if (session.ended_at) {
+    const end = new Date(session.ended_at);
+    endMin = end.getHours() * 60 + end.getMinutes();
+  } else {
+    const now = new Date(nowMs);
+    endMin = now.getHours() * 60 + now.getMinutes();
+  }
+  return {
+    top: startMin * PPM,
+    height: Math.max(4, (endMin - startMin) * PPM),
+  };
+}
+
 export default function TodayStrip({ activeSession, setActiveSession }) {
   const queryClient = useQueryClient();
   const todayStr = toLocalDateStr(new Date());
   const [viewDate, setViewDate] = useState(todayStr);
-  const [popover, setPopover] = useState(null); // { session, x, y }
+  const [popover, setPopover] = useState(null);
   const [showFreeformInput, setShowFreeformInput] = useState(false);
   const [freeformTitle, setFreeformTitle] = useState('');
   const [starting, setStarting] = useState(false);
-  const [elapsed, setElapsed] = useState('00:00');
+  const [nowMs, setNowMs] = useState(Date.now());
+  const scrollRef = useRef(null);
 
   const isToday = viewDate === todayStr;
 
-  const { data } = useQuery({
-    queryKey: ['sessions', 'day', viewDate],
-    queryFn: () => api.getTodaySessions(viewDate).then((d) => d.sessions),
-    refetchInterval: isToday ? 30000 : false,
-  });
-  const sessions = data ?? [];
-
-  // Live timer for active session
+  // Update every second for elapsed timer + active block growth
   useEffect(() => {
-    if (!activeSession) return;
-    const tick = () => setElapsed(fmtElapsed(activeSession.startedAt));
-    tick();
-    const id = setInterval(tick, 1000);
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [activeSession?.startedAt]);
+  }, []);
 
-  // Refresh today's list when active session changes
+  // Scroll to current time (or 8am for past days) when day changes
   useEffect(() => {
-    queryClient.invalidateQueries({ queryKey: ['sessions', 'day', todayStr] });
-  }, [activeSession?.sessionId, queryClient, todayStr]);
+    if (!scrollRef.current) return;
+    const now = new Date();
+    const scrollTo = isToday
+      ? Math.max(0, (now.getHours() * 60 + now.getMinutes()) * PPM - 80)
+      : 8 * HOUR_PX - 40;
+    scrollRef.current.scrollTop = scrollTo;
+  }, [viewDate, isToday]);
 
   // Close popover on outside click
   useEffect(() => {
@@ -80,6 +97,18 @@ export default function TodayStrip({ activeSession, setActiveSession }) {
     document.addEventListener('click', handle);
     return () => document.removeEventListener('click', handle);
   }, [popover]);
+
+  // Refresh when active session changes
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: ['sessions', 'day', todayStr] });
+  }, [activeSession?.sessionId, queryClient, todayStr]);
+
+  const { data } = useQuery({
+    queryKey: ['sessions', 'day', viewDate],
+    queryFn: () => api.getTodaySessions(viewDate).then((d) => d.sessions),
+    refetchInterval: isToday ? 30000 : false,
+  });
+  const sessions = data ?? [];
 
   function prevDay() {
     const d = new Date(viewDate + 'T00:00:00');
@@ -97,31 +126,16 @@ export default function TodayStrip({ activeSession, setActiveSession }) {
   async function handleStartFreeform() {
     const title = freeformTitle.trim();
     if (!title) return;
-
     if (activeSession) {
-      const ok = window.confirm(
-        `End session for "${activeSession.todoTitle}" and start "${title}"?`
-      );
+      const ok = window.confirm(`End "${activeSession.todoTitle}" and start "${title}"?`);
       if (!ok) return;
       await api.endSession(activeSession.sessionId, null);
     }
-
     setStarting(true);
-    setActiveSession({
-      sessionId: null,
-      todoId: null,
-      todoTitle: title,
-      startedAt: new Date().toISOString(),
-    });
-
+    setActiveSession({ sessionId: null, todoId: null, todoTitle: title, startedAt: new Date().toISOString() });
     try {
       const session = await api.startFreeformSession(title);
-      setActiveSession({
-        sessionId: session.id,
-        todoId: null,
-        todoTitle: title,
-        startedAt: session.started_at,
-      });
+      setActiveSession({ sessionId: session.id, todoId: null, todoTitle: title, startedAt: session.started_at });
     } catch {
       setActiveSession(null);
     } finally {
@@ -139,6 +153,13 @@ export default function TodayStrip({ activeSession, setActiveSession }) {
     queryClient.invalidateQueries({ queryKey: ['sessions', 'day', todayStr] });
   }
 
+  async function handleDelete(e, s) {
+    e.stopPropagation();
+    await api.deleteSession(s.id);
+    if (activeSession?.sessionId === s.id) setActiveSession(null);
+    queryClient.invalidateQueries({ queryKey: ['sessions', 'day', viewDate] });
+  }
+
   function openPopover(e, s) {
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
@@ -149,7 +170,12 @@ export default function TodayStrip({ activeSession, setActiveSession }) {
     });
   }
 
+  const nowDate = new Date(nowMs);
+  const nowLinePx = (nowDate.getHours() * 60 + nowDate.getMinutes()) * PPM;
   const activeInList = activeSession && sessions.some((s) => s.id === activeSession.sessionId);
+  const activeColor = activeSession?.todoId
+    ? SESSION_COLORS[activeSession.todoId % SESSION_COLORS.length]
+    : FREEFORM_COLOR;
 
   return (
     <div className="today-strip">
@@ -157,21 +183,26 @@ export default function TodayStrip({ activeSession, setActiveSession }) {
       <div className="today-strip-header">
         <button className="today-nav-btn" onClick={prevDay}>‹</button>
         <span className="today-label">{formatDayLabel(viewDate)}</span>
-        <button
-          className="today-nav-btn"
-          onClick={nextDay}
-          disabled={viewDate >= todayStr}
-        >›</button>
+        <button className="today-nav-btn" onClick={nextDay} disabled={viewDate >= todayStr}>›</button>
         {isToday && (
           <button
             className="today-add-btn"
             onClick={() => { setShowFreeformInput((v) => !v); setFreeformTitle(''); }}
-            title="Start freeform session"
           >
             {showFreeformInput ? '×' : '+'}
           </button>
         )}
       </div>
+
+      {/* Active session pill — always visible regardless of scroll */}
+      {isToday && activeSession && (
+        <div className="today-active-pill" style={{ background: activeColor }}>
+          <span className="tap-dot" />
+          <span className="tap-title">{activeSession.todoTitle}</span>
+          <span className="tap-timer">{fmtElapsed(activeSession.startedAt, nowMs)}</span>
+          <button className="tap-end" onClick={handleEndSession}>End</button>
+        </div>
+      )}
 
       {/* Freeform input */}
       {showFreeformInput && (
@@ -197,61 +228,74 @@ export default function TodayStrip({ activeSession, setActiveSession }) {
         </div>
       )}
 
-      {/* Session list */}
-      <div className="today-sessions-list">
-        {/* Optimistic active block before query catches up */}
-        {isToday && activeSession && !activeInList && (
-          <div
-            className="session-strip-block is-active"
-            style={{
-              borderLeftColor: activeSession.todoId
-                ? SESSION_COLORS[activeSession.todoId % SESSION_COLORS.length]
-                : FREEFORM_COLOR,
-            }}
-          >
-            <span className="ssb-title">{activeSession.todoTitle}</span>
-            <span
-              className="ssb-duration"
-              style={{
-                color: activeSession.todoId
-                  ? SESSION_COLORS[activeSession.todoId % SESSION_COLORS.length]
-                  : FREEFORM_COLOR,
-              }}
-            >
-              {elapsed}
-            </span>
-            <button className="ssb-end-btn" onClick={handleEndSession}>End</button>
+      {/* Mini time grid */}
+      <div className="today-time-grid" ref={scrollRef}>
+        <div className="today-time-inner">
+          {/* Hour labels */}
+          <div className="today-time-gutter">
+            {HOURS.map((h) => (
+              <div key={h} className="today-hour-label" style={{ top: h * HOUR_PX }}>
+                {formatHour(h)}
+              </div>
+            ))}
           </div>
-        )}
 
-        {sessions.map((s) => {
-          const isActive = activeSession?.sessionId === s.id;
-          const color = sessionColor(s);
+          {/* Day column */}
+          <div className="today-day-col">
+            <div style={{ position: 'relative', height: TOTAL_HEIGHT }}>
+              {/* Hour lines */}
+              {HOURS.map((h) => (
+                <div key={h} className="today-hour-line" style={{ top: h * HOUR_PX }} />
+              ))}
 
-          return (
-            <div
-              key={s.id}
-              className={`session-strip-block${isActive ? ' is-active' : ''}`}
-              style={{ borderLeftColor: color }}
-              onClick={(e) => openPopover(e, s)}
-            >
-              <span className="ssb-title">{s.todo_title || s.title || 'Session'}</span>
-              <span className="ssb-duration" style={{ color }}>
-                {isActive ? elapsed : fmtDuration(s.seconds_spent)}
-              </span>
-              {isActive && (
-                <button className="ssb-end-btn" onClick={handleEndSession}>End</button>
-              )}
+              {/* Current time indicator */}
+              {isToday && <div className="today-now-line" style={{ top: nowLinePx }} />}
+
+              {/* Optimistic active block (before query refetches) */}
+              {isToday && activeSession && !activeInList && (() => {
+                const { top, height } = getBlockStyle(
+                  { started_at: activeSession.startedAt, ended_at: null },
+                  nowMs
+                );
+                return (
+                  <div
+                    className="cal-block is-active"
+                    style={{ top, height, background: activeColor }}
+                  >
+                    <span className="cal-block-title">{activeSession.todoTitle}</span>
+                  </div>
+                );
+              })()}
+
+              {/* Session blocks */}
+              {sessions.map((s) => {
+                const color = sessionColor(s);
+                const isActive = activeSession?.sessionId === s.id;
+                const { top, height } = getBlockStyle(s, nowMs);
+                return (
+                  <div
+                    key={s.id}
+                    className={`cal-block${isActive ? ' is-active' : ''}`}
+                    style={{ top, height, background: color }}
+                    onClick={(e) => openPopover(e, s)}
+                  >
+                    <span className="cal-block-title">
+                      {s.todo_title || s.title || 'Session'}
+                    </span>
+                    <button
+                      className="cal-block-delete"
+                      onClick={(e) => handleDelete(e, s)}
+                      title="Delete"
+                    >×</button>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
-
-        {sessions.length === 0 && !(isToday && activeSession && !activeInList) && (
-          <p className="today-empty">No sessions {isToday ? 'yet' : 'this day'}</p>
-        )}
+          </div>
+        </div>
       </div>
 
-      {/* Fixed-position popover — escapes overflow clipping */}
+      {/* Fixed-position popover */}
       {popover && (
         <div
           className="session-popover-fixed"

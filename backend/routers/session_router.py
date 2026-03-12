@@ -111,6 +111,16 @@ def end_session(session_id: int, body: EndSession):
     return row
 
 
+# delete a session
+@router.delete("/sessions/{session_id}", status_code=204)
+def delete_session(session_id: int):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM sessions WHERE id = %s RETURNING id;", (session_id,))
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Session not found")
+
+
 # get sessions for a UTC timestamp range (frontend converts local day → UTC bounds)
 @router.get("/sessions/today")
 def get_today_sessions(start: str = Query(...), end: str = Query(...)):

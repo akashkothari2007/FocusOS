@@ -181,15 +181,15 @@ body {
 /* ─── Todos Page Layout ───────────────────────────────────── */
 .todos-page {
   display: grid;
-  grid-template-columns: 196px 1fr 310px;
+  grid-template-columns: 220px 1fr 310px;
   gap: 20px;
-  max-width: 1240px;
+  max-width: 1260px;
   margin: 0 auto;
   padding: 32px 24px;
   align-items: start;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1000px) {
   .todos-page {
     grid-template-columns: 1fr 310px;
   }
@@ -1299,12 +1299,12 @@ body {
   border: 1.5px solid rgba(99, 102, 241, 0.1);
   border-radius: 18px;
   box-shadow: 0 4px 20px rgba(99, 102, 241, 0.07);
-  padding: 14px 12px;
+  padding: 12px 12px 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   max-height: calc(100vh - 100px);
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .today-strip-header {
@@ -1367,99 +1367,163 @@ body {
 }
 .freeform-input-row .input { flex: 1; min-width: 0; }
 
-.today-sessions-list {
+/* Active session pill (always visible at top of strip) */
+.today-active-pill {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  animation: active-pill-pulse 2s ease-in-out infinite;
 }
 
-.strip-block-wrap {
+@keyframes active-pill-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.85; }
+}
+
+.tap-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.9);
+  flex-shrink: 0;
+  animation: dot-blink 1.2s ease-in-out infinite;
+}
+
+@keyframes dot-blink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}
+
+.tap-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tap-timer {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.9);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.tap-end {
+  background: rgba(255,255,255,0.22);
+  border: none;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: inherit;
+  flex-shrink: 0;
+  transition: background 0.12s;
+}
+.tap-end:hover { background: rgba(255,255,255,0.35); }
+
+/* Mini time grid inside the strip */
+.today-time-grid {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  margin: 0 -12px;
+  border-top: 1px solid rgba(99, 102, 241, 0.07);
+}
+
+.today-time-inner {
+  display: flex;
+}
+
+.today-time-gutter {
+  width: 26px;
+  flex-shrink: 0;
   position: relative;
 }
 
-.session-strip-block {
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(99, 102, 241, 0.08);
-  border-left: 4px solid #6366f1;
-  border-radius: 10px;
-  padding: 8px 10px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  transition: background 0.15s, box-shadow 0.2s;
-}
-.session-strip-block:hover {
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 3px 12px rgba(99, 102, 241, 0.1);
-}
-.session-strip-block.is-active {
-  background: rgba(255, 255, 255, 0.95);
-  animation: strip-block-glow 2.5s ease-in-out infinite;
-}
-
-@keyframes strip-block-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.2); }
-  50%       { box-shadow: 0 0 0 5px rgba(99, 102, 241, 0); }
-}
-
-.ssb-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #1a1a2e;
+.today-hour-label {
+  position: absolute;
+  right: 4px;
+  font-size: 9px;
+  color: #b0b8cc;
+  font-weight: 500;
+  transform: translateY(-50%);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.3;
+  user-select: none;
 }
 
-.ssb-duration {
-  font-size: 12px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
+.today-day-col {
+  flex: 1;
+  min-width: 0;
+  border-left: 1px solid rgba(99, 102, 241, 0.08);
 }
 
-.ssb-end-btn {
-  background: rgba(225, 29, 72, 0.09);
-  color: #e11d48;
+.today-hour-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(99, 102, 241, 0.07);
+  pointer-events: none;
+}
+
+.today-now-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #e11d48;
+  z-index: 5;
+  pointer-events: none;
+}
+.today-now-line::before {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #e11d48;
+}
+
+/* ─── Session block delete X ──────────────────────────────── */
+.cal-block-delete {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  background: rgba(0, 0, 0, 0.35);
   border: none;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
+  color: #fff;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  font-size: 13px;
+  line-height: 1;
   cursor: pointer;
   font-family: inherit;
-  margin-top: 3px;
-  align-self: flex-start;
-  transition: background 0.12s;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.12s;
+  z-index: 10;
 }
-.ssb-end-btn:hover { background: rgba(225, 29, 72, 0.16); }
+.cal-block:hover .cal-block-delete { opacity: 1; }
+.cal-block-delete:hover { background: rgba(225, 29, 72, 0.85) !important; }
 
-.today-empty {
-  font-size: 12px;
-  color: #b0b8cc;
-  text-align: center;
-  padding: 16px 0;
-  font-style: italic;
-}
-
-/* ─── Session Popover ─────────────────────────────────────── */
-.session-popover {
-  position: absolute;
-  left: calc(100% + 8px);
-  top: 0;
-  z-index: 60;
-  width: 220px;
-  background: rgba(255, 255, 255, 0.98);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1.5px solid rgba(99, 102, 241, 0.15);
-  border-radius: 13px;
-  box-shadow: 0 8px 28px rgba(99, 102, 241, 0.13), 0 2px 10px rgba(0,0,0,0.07);
-  padding: 12px 14px 12px;
-}
-
+/* ─── Popover (shared by strip + calendar) ────────────────── */
 .sp-close {
   position: absolute;
   top: 8px;
@@ -1703,21 +1767,39 @@ body {
   z-index: 2;
   overflow: hidden;
   transition: filter 0.15s, transform 0.1s;
-  min-height: 20px;
 }
 .cal-block:hover {
   filter: brightness(0.88);
-  transform: scaleX(0.96);
+  transform: scaleX(0.97);
   z-index: 3;
 }
+
+/* Active block: glow + pulsing bottom edge shows it's "growing" */
 .cal-block.is-active {
-  animation: cal-block-pulse 2.5s ease-in-out infinite;
   z-index: 4;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+  animation: active-block-glow 2s ease-in-out infinite;
+}
+.cal-block.is-active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.65);
+  border-radius: 0 0 5px 5px;
+  animation: active-edge-pulse 1.4s ease-in-out infinite;
 }
 
-@keyframes cal-block-pulse {
-  0%, 100% { filter: brightness(1); }
-  50%       { filter: brightness(1.12); }
+@keyframes active-block-glow {
+  0%, 100% { filter: brightness(1) saturate(1); box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+  50%       { filter: brightness(1.08) saturate(1.1); box-shadow: 0 4px 18px rgba(0,0,0,0.28); }
+}
+
+@keyframes active-edge-pulse {
+  0%, 100% { opacity: 0.35; transform: scaleY(1); }
+  50%       { opacity: 1;    transform: scaleY(2); }
 }
 
 .cal-block-title {

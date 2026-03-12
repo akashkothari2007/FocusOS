@@ -5,8 +5,8 @@ import { api } from '../api';
 const SESSION_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#14b8a6'];
 const FREEFORM_COLOR = '#8b5cf6';
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const HOUR_PX = 60;           // 60px per hour = 1px per minute
-const TOTAL_HEIGHT = 24 * HOUR_PX; // 1440px
+const HOUR_PX = 60;
+const TOTAL_HEIGHT = 24 * HOUR_PX;
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 function sessionColor(s) {
@@ -33,7 +33,7 @@ function formatHour(h) {
   return `${h - 12}pm`;
 }
 
-// Returns top (px from midnight) and height (px) for a session block
+// Use actual duration (no inflated minimum) to prevent visual overlap
 function getBlockStyle(session, nowMs) {
   const start = new Date(session.started_at);
   const startMin = start.getHours() * 60 + start.getMinutes();
@@ -47,24 +47,26 @@ function getBlockStyle(session, nowMs) {
     endMin = now.getHours() * 60 + now.getMinutes();
   }
 
-  const height = Math.max(20, endMin - startMin);
-  return { top: startMin, height };
+  return {
+    top: startMin,                          // 1px per minute
+    height: Math.max(4, endMin - startMin), // min 4px so it's always visible
+  };
 }
 
 export default function Calendar({ activeSession, setActiveSession }) {
   const queryClient = useQueryClient();
   const todayStr = toLocalDateStr(new Date());
   const [weekStart, setWeekStart] = useState(() => toLocalDateStr(getMonday(new Date())));
-  const [popover, setPopover] = useState(null); // { session, x, y }
+  const [popover, setPopover] = useState(null);
   const [showFreeformInput, setShowFreeformInput] = useState(false);
   const [freeformTitle, setFreeformTitle] = useState('');
   const [starting, setStarting] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
   const scrollRef = useRef(null);
 
-  // Update nowMs every 30s so active session block grows in real time
+  // Update every second — drives active block growth + now-line
   useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 30000);
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
 
@@ -89,7 +91,6 @@ export default function Calendar({ activeSession, setActiveSession }) {
   const { data } = useQuery({
     queryKey: ['sessions', 'week', weekStart],
     queryFn: () => api.getWeekSessions(weekStart).then((d) => d.sessions),
-    refetchInterval: 60000,
   });
   const sessions = data ?? [];
 
@@ -121,18 +122,13 @@ export default function Calendar({ activeSession, setActiveSession }) {
   async function handleStartFreeform() {
     const title = freeformTitle.trim();
     if (!title) return;
-
     if (activeSession) {
-      const ok = window.confirm(
-        `End session for "${activeSession.todoTitle}" and start "${title}"?`
-      );
+      const ok = window.confirm(`End session for "${activeSession.todoTitle}" and start "${title}"?`);
       if (!ok) return;
       await api.endSession(activeSession.sessionId, null);
     }
-
     setStarting(true);
     setActiveSession({ sessionId: null, todoId: null, todoTitle: title, startedAt: new Date().toISOString() });
-
     try {
       const session = await api.startFreeformSession(title);
       setActiveSession({ sessionId: session.id, todoId: null, todoTitle: title, startedAt: session.started_at });
@@ -146,6 +142,13 @@ export default function Calendar({ activeSession, setActiveSession }) {
     }
   }
 
+  async function handleDelete(e, s) {
+    e.stopPropagation();
+    await api.deleteSession(s.id);
+    if (activeSession?.sessionId === s.id) setActiveSession(null);
+    queryClient.invalidateQueries({ queryKey: ['sessions', 'week', weekStart] });
+  }
+
   function handleBlockClick(e, s) {
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
@@ -156,13 +159,11 @@ export default function Calendar({ activeSession, setActiveSession }) {
     });
   }
 
-  // Current time line position in px
   const nowDate = new Date(nowMs);
   const nowLinePx = nowDate.getHours() * 60 + nowDate.getMinutes();
 
   return (
     <div className="calendar-page">
-      {/* Top bar */}
       <div className="calendar-header">
         <button className="cal-nav-btn" onClick={prevWeek}>‹ Prev</button>
         <span className="cal-week-label">{weekLabel()}</span>
@@ -188,17 +189,13 @@ export default function Calendar({ activeSession, setActiveSession }) {
             }}
             autoFocus
           />
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={handleStartFreeform}
-            disabled={!freeformTitle.trim() || starting}
-          >
+          <button className="btn btn-primary btn-sm" onClick={handleStartFreeform} disabled={!freeformTitle.trim() || starting}>
             {starting ? '…' : 'Start'}
           </button>
         </div>
       )}
 
-      {/* Day headers (fixed, outside scroll) */}
+      {/* Fixed day headers */}
       <div className="cal-header-row">
         <div className="cal-gutter-spacer" />
         {weekDays.map((dayStr, i) => {
@@ -216,7 +213,6 @@ export default function Calendar({ activeSession, setActiveSession }) {
       {/* Scrollable time grid */}
       <div className="cal-scroll-body" ref={scrollRef}>
         <div className="cal-inner">
-          {/* Time gutter */}
           <div className="cal-time-gutter">
             {HOURS.map((h) => (
               <div key={h} className="cal-hour-label" style={{ top: h * HOUR_PX }}>
@@ -225,7 +221,6 @@ export default function Calendar({ activeSession, setActiveSession }) {
             ))}
           </div>
 
-          {/* Day columns */}
           <div className="cal-columns">
             {weekDays.map((dayStr) => {
               const isToday = dayStr === todayStr;
@@ -236,22 +231,16 @@ export default function Calendar({ activeSession, setActiveSession }) {
               return (
                 <div key={dayStr} className={`cal-day-col${isToday ? ' is-today' : ''}`}>
                   <div className="cal-timeline" style={{ height: TOTAL_HEIGHT }}>
-                    {/* Hour lines */}
                     {HOURS.map((h) => (
                       <div key={h} className="cal-hour-line" style={{ top: h * HOUR_PX }} />
                     ))}
-
-                    {/* Current time indicator */}
                     {isToday && (
                       <div className="cal-now-line" style={{ top: nowLinePx }} />
                     )}
-
-                    {/* Session blocks */}
                     {daySessions.map((s) => {
                       const color = sessionColor(s);
                       const { top, height } = getBlockStyle(s, nowMs);
                       const isActive = activeSession?.sessionId === s.id;
-
                       return (
                         <div
                           key={s.id}
@@ -262,6 +251,11 @@ export default function Calendar({ activeSession, setActiveSession }) {
                           <span className="cal-block-title">
                             {s.todo_title || s.title || 'Session'}
                           </span>
+                          <button
+                            className="cal-block-delete"
+                            onClick={(e) => handleDelete(e, s)}
+                            title="Delete session"
+                          >×</button>
                         </div>
                       );
                     })}
@@ -273,7 +267,6 @@ export default function Calendar({ activeSession, setActiveSession }) {
         </div>
       </div>
 
-      {/* Fixed-position popover — won't be clipped by overflow */}
       {popover && (
         <div
           className="session-popover-fixed"
@@ -284,9 +277,7 @@ export default function Calendar({ activeSession, setActiveSession }) {
           onClick={(e) => e.stopPropagation()}
         >
           <button className="sp-close" onClick={() => setPopover(null)}>×</button>
-          <p className="sp-title">
-            {popover.session.todo_title || popover.session.title || 'Session'}
-          </p>
+          <p className="sp-title">{popover.session.todo_title || popover.session.title || 'Session'}</p>
           {popover.session.notes
             ? <p className="sp-notes">{popover.session.notes}</p>
             : <p className="sp-notes-empty">No notes</p>
