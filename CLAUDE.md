@@ -275,9 +275,12 @@ POST   /todos/{id}/sessions/start  → 409 if session already open
 GET    /sessions/active            null if none open
 POST   /sessions/start             {title, notes?}  freeform (no todo)
 PATCH  /sessions/{id}/end          {notes?}  auto-calculates seconds_spent
+PATCH  /sessions/{id}/notes        {notes}  update notes on any session (incl. ended)
 DELETE /sessions/{id}              204
 GET    /sessions/today             ?start=ISO&end=ISO  (UTC bounds)
 GET    /sessions/week              ?start=ISO&end=ISO  (UTC bounds)
+POST   /todos/quick-session        {project}  Siri shortcut — fuzzy match + start (200 skipped if active)
+POST   /sessions/quick-end         Siri shortcut — end active session (200 skipped if none)
 ```
 
 ### Jobs

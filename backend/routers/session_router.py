@@ -191,6 +191,20 @@ def quick_session(body: QuickSession):
             
             return cur.fetchone()
 
+@router.patch("/sessions/{session_id}/notes")
+def update_session_notes(session_id: int, body: EndSession):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE sessions SET notes = %s WHERE id = %s RETURNING *;",
+                (body.notes, session_id)
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Session not found")
+    return row
+
+
 @router.post("/sessions/quick-end")
 def quick_end_session():
     with get_conn() as conn:

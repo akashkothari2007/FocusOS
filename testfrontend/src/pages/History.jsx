@@ -97,7 +97,20 @@ export default function History() {
               <span className="session-card-date">{formatDate(s.started_at)}</span>
               <span className="session-card-duration">{formatDuration(s.seconds_spent)}</span>
             </div>
-            {s.notes && <p className="session-card-notes">{s.notes}</p>}
+            <textarea
+              className="session-card-notes-input"
+              placeholder="Add notes…"
+              defaultValue={s.notes || ''}
+              rows={2}
+              onBlur={async (e) => {
+                const newNotes = e.target.value;
+                if (newNotes === (s.notes || '')) return;
+                await api.updateSessionNotes(s.id, newNotes);
+                setSessions((prev) =>
+                  prev.map((x) => (x.id === s.id ? { ...x, notes: newNotes } : x))
+                );
+              }}
+            />
           </div>
         ))}
     </div>

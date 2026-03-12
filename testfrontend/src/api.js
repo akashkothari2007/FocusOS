@@ -44,6 +44,9 @@ export const api = {
   deleteSession: (sessionId) =>
     request(`/api/v1/sessions/${sessionId}`, { method: 'DELETE' }),
 
+  updateSessionNotes: (sessionId, notes) =>
+    request(`/api/v1/sessions/${sessionId}/notes`, { method: 'PATCH', body: JSON.stringify({ notes }) }),
+
   // Jobs
   getJobs: (status) =>
     request(`/api/v1/jobs${status ? `?status=${status}` : ''}`),

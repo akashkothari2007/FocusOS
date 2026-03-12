@@ -61,6 +61,7 @@ export default function Calendar({ activeSession, setActiveSession }) {
   const todayStr = toLocalDateStr(new Date());
   const [weekStart, setWeekStart] = useState(() => toLocalDateStr(getMonday(new Date())));
   const [popover, setPopover] = useState(null);
+  const [popoverNotes, setPopoverNotes] = useState('');
   const [showFreeformInput, setShowFreeformInput] = useState(false);
   const [freeformTitle, setFreeformTitle] = useState('');
   const [starting, setStarting] = useState(false);
@@ -143,6 +144,16 @@ export default function Calendar({ activeSession, setActiveSession }) {
       setFreeformTitle('');
       setShowFreeformInput(false);
     }
+  }
+
+  useEffect(() => {
+    if (popover) setPopoverNotes(popover.session.notes || '');
+  }, [popover?.session?.id]);
+
+  async function savePopoverNotes() {
+    if (!popover || popoverNotes === (popover.session.notes || '')) return;
+    await api.updateSessionNotes(popover.session.id, popoverNotes);
+    queryClient.invalidateQueries({ queryKey: ['sessions', 'week'] });
   }
 
   async function handleDelete(e, s) {
@@ -276,12 +287,16 @@ export default function Calendar({ activeSession, setActiveSession }) {
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button className="sp-close" onClick={() => setPopover(null)}>×</button>
+          <button className="sp-close" onClick={async () => { await savePopoverNotes(); setPopover(null); }}>×</button>
           <p className="sp-title">{popover.session.todo_title || popover.session.title || 'Session'}</p>
-          {popover.session.notes
-            ? <p className="sp-notes">{popover.session.notes}</p>
-            : <p className="sp-notes-empty">No notes</p>
-          }
+          <textarea
+            className="sp-notes-input"
+            placeholder="Add notes…"
+            value={popoverNotes}
+            rows={3}
+            onChange={(e) => setPopoverNotes(e.target.value)}
+            onBlur={savePopoverNotes}
+          />
           <button
             className="sp-delete-btn"
             onClick={async (e) => {
