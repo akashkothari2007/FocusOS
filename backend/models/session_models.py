@@ -9,3 +9,7 @@ class EndSession(BaseModel):
 class StartFreeformSession(BaseModel):
     title: str
     notes: Optional[str] = None
+
+
+class QuickSession(BaseModel):
+    project: str

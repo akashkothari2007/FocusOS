@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 from db import get_conn
-from models.session_models import EndSession, StartFreeformSession
+from models.session_models import EndSession, StartFreeformSession, QuickSession
 
 router = APIRouter(prefix="/api/v1")
 
@@ -161,7 +161,7 @@ def get_week_sessions(start: str = Query(...), end: str = Query(...)):
 #for phone to hit
 
 @router.post("/todos/quick-session")
-def quick_session(project: str):
+def quick_session(body: QuickSession):
     with get_conn() as conn:
         with conn.cursor() as cur:
             # check no active session
@@ -172,10 +172,10 @@ def quick_session(project: str):
             # try to find matching todo
             cur.execute(
                 "SELECT id, title FROM todos WHERE title ILIKE %s AND status = 'pending' LIMIT 1",
-                (f"%{project}%",)
+                (f"%{body.project}%",)
             )
             todo = cur.fetchone()
-            
+
             if todo:
                 # linked session
                 cur.execute(
@@ -186,7 +186,7 @@ def quick_session(project: str):
                 # freeform fallback
                 cur.execute(
                     "INSERT INTO sessions (title) VALUES (%s) RETURNING *",
-                    (project,)
+                    (body.project,)
                 )
             
             return cur.fetchone()
