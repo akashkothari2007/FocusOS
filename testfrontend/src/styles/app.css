@@ -1442,7 +1442,6 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
-  margin: 0 -12px;
   border-top: 1px solid rgba(99, 102, 241, 0.07);
 }
 
