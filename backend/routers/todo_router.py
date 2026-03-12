@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, HTTPException
 from typing import Optional, Literal
 from db import get_conn
-from models.todo_models import CreateTodo, UpdateTodo, Link, ReorderTodos
+from models.todo_models import CreateTodo, UpdateTodo, Link, ReorderTodos, QuickTodo
 
 router = APIRouter(prefix="/api/v1")
 
@@ -100,18 +100,18 @@ def delete_todo(todo_id: int):
     return  # 204 = no content
 
 @router.post("/todos/quick-subtask")
-def quick_subtask(title: str, project: str):
+def quick_subtask(body: QuickTodo):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT id, subtasks FROM todos WHERE title ILIKE %s LIMIT 1",
-                (f"%{project}%",)
+                (f"%{body.project}%",)
             )
             row = cur.fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="Todo not found")
             subtasks = row["subtasks"] or []
-            subtasks.append({"id": str(uuid.uuid4()), "title": title, "status": "pending", "order": len(subtasks)})
+            subtasks.append({"id": str(uuid.uuid4()), "title": body.title, "status": "pending", "order": len(subtasks)})
             cur.execute(
                 "UPDATE todos SET subtasks = %s WHERE id = %s",
                 (json.dumps(subtasks), row["id"])

@@ -34,3 +34,8 @@ class UpdateTodo(BaseModel):
 
 class ReorderTodos(BaseModel):
     ids: List[int]
+
+class QuickTodo(BaseModel):
+    project: str
+    title: str
+    
