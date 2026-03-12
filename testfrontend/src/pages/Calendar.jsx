@@ -47,9 +47,11 @@ function getBlockStyle(session, nowMs) {
     endMin = now.getHours() * 60 + now.getMinutes();
   }
 
+  const durationMins = endMin - startMin;
   return {
-    top: startMin,                          // 1px per minute
-    height: Math.max(4, endMin - startMin), // min 4px so it's always visible
+    top: startMin,
+    height: Math.max(4, durationMins),
+    showTitle: durationMins >= 20,
   };
 }
 
@@ -239,7 +241,7 @@ export default function Calendar({ activeSession, setActiveSession }) {
                     )}
                     {daySessions.map((s) => {
                       const color = sessionColor(s);
-                      const { top, height } = getBlockStyle(s, nowMs);
+                      const { top, height, showTitle } = getBlockStyle(s, nowMs);
                       const isActive = activeSession?.sessionId === s.id;
                       return (
                         <div
@@ -248,9 +250,11 @@ export default function Calendar({ activeSession, setActiveSession }) {
                           style={{ top, height, background: color }}
                           onClick={(e) => handleBlockClick(e, s)}
                         >
-                          <span className="cal-block-title">
-                            {s.todo_title || s.title || 'Session'}
-                          </span>
+                          {showTitle && (
+                            <span className="cal-block-title">
+                              {s.todo_title || s.title || 'Session'}
+                            </span>
+                          )}
                           <button
                             className="cal-block-delete"
                             onClick={(e) => handleDelete(e, s)}

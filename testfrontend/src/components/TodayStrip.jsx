@@ -55,9 +55,11 @@ function getBlockStyle(session, nowMs) {
     const now = new Date(nowMs);
     endMin = now.getHours() * 60 + now.getMinutes();
   }
+  const durationMins = endMin - startMin;
   return {
     top: startMin * PPM,
-    height: Math.max(4, (endMin - startMin) * PPM),
+    height: Math.max(4, durationMins * PPM),
+    showTitle: durationMins >= 20,
   };
 }
 
@@ -253,7 +255,7 @@ export default function TodayStrip({ activeSession, setActiveSession }) {
 
               {/* Optimistic active block (before query refetches) */}
               {isToday && activeSession && !activeInList && (() => {
-                const { top, height } = getBlockStyle(
+                const { top, height, showTitle } = getBlockStyle(
                   { started_at: activeSession.startedAt, ended_at: null },
                   nowMs
                 );
@@ -262,7 +264,7 @@ export default function TodayStrip({ activeSession, setActiveSession }) {
                     className="cal-block is-active"
                     style={{ top, height, background: activeColor }}
                   >
-                    <span className="cal-block-title">{activeSession.todoTitle}</span>
+                    {showTitle && <span className="cal-block-title">{activeSession.todoTitle}</span>}
                   </div>
                 );
               })()}
@@ -271,7 +273,7 @@ export default function TodayStrip({ activeSession, setActiveSession }) {
               {sessions.map((s) => {
                 const color = sessionColor(s);
                 const isActive = activeSession?.sessionId === s.id;
-                const { top, height } = getBlockStyle(s, nowMs);
+                const { top, height, showTitle } = getBlockStyle(s, nowMs);
                 return (
                   <div
                     key={s.id}
@@ -279,9 +281,11 @@ export default function TodayStrip({ activeSession, setActiveSession }) {
                     style={{ top, height, background: color }}
                     onClick={(e) => openPopover(e, s)}
                   >
-                    <span className="cal-block-title">
-                      {s.todo_title || s.title || 'Session'}
-                    </span>
+                    {showTitle && (
+                      <span className="cal-block-title">
+                        {s.todo_title || s.title || 'Session'}
+                      </span>
+                    )}
                     <button
                       className="cal-block-delete"
                       onClick={(e) => handleDelete(e, s)}
