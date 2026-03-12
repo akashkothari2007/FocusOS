@@ -157,3 +157,52 @@ def get_week_sessions(start: str = Query(...), end: str = Query(...)):
             )
             rows = cur.fetchall()
     return {"sessions": rows}
+
+#for phone to hit
+
+@router.post("/todos/quick-session")
+def quick_session(project: str):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            # check no active session
+            cur.execute("SELECT id FROM sessions WHERE ended_at IS NULL LIMIT 1")
+            if cur.fetchone():
+                return {"status": "skipped", "message": "Session already active"}
+            
+            # try to find matching todo
+            cur.execute(
+                "SELECT id, title FROM todos WHERE title ILIKE %s AND status = 'pending' LIMIT 1",
+                (f"%{project}%",)
+            )
+            todo = cur.fetchone()
+            
+            if todo:
+                # linked session
+                cur.execute(
+                    "INSERT INTO sessions (todo_id, title) VALUES (%s, %s) RETURNING *",
+                    (todo["id"], todo["title"])
+                )
+            else:
+                # freeform fallback
+                cur.execute(
+                    "INSERT INTO sessions (title) VALUES (%s) RETURNING *",
+                    (project,)
+                )
+            
+            return cur.fetchone()
+
+@router.post("/sessions/quick-end")
+def quick_end_session():
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM sessions WHERE ended_at IS NULL LIMIT 1")
+            session = cur.fetchone()
+            if not session:
+                return {"status": "skipped", "message": "No active session"}
+            cur.execute(
+                """UPDATE sessions SET ended_at = NOW(),
+                   seconds_spent = EXTRACT(EPOCH FROM (NOW() - started_at))::INT
+                   WHERE id = %s RETURNING *""",
+                (session["id"],)
+            )
+            return cur.fetchone()

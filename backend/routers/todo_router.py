@@ -1,4 +1,5 @@
 import json
+import uuid
 from fastapi import APIRouter, HTTPException
 from typing import Optional, Literal
 from db import get_conn
@@ -110,7 +111,7 @@ def quick_subtask(title: str, project: str):
             if not row:
                 raise HTTPException(status_code=404, detail="Todo not found")
             subtasks = row["subtasks"] or []
-            subtasks.append({"id": str(len(subtasks)+1), "title": title, "status": "pending", "order": len(subtasks)})
+            subtasks.append({"id": str(uuid.uuid4()), "title": title, "status": "pending", "order": len(subtasks)})
             cur.execute(
                 "UPDATE todos SET subtasks = %s WHERE id = %s",
                 (json.dumps(subtasks), row["id"])
