@@ -211,6 +211,7 @@ body {
   top: 74px;
 }
 
+
 /* ─── Add Todo Form ───────────────────────────────────────── */
 .add-form {
   background: rgba(255, 255, 255, 0.9);
@@ -1308,7 +1309,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: calc(100vh - 100px);
+  max-height: 650px;
   overflow: hidden;
 }
 
