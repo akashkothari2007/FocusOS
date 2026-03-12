@@ -1,20 +1,20 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from db import get_conn
-from models.session_models import EndSession
+from models.session_models import EndSession, StartFreeformSession
 
 router = APIRouter(prefix="/api/v1")
 
 
-# Returns the one open session (ended_at IS NULL) if any, with its todo title
+# Returns the one open session (ended_at IS NULL) if any, with its title
 @router.get("/sessions/active")
 def get_active_session():
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT s.*, t.title AS todo_title
+                SELECT s.*, COALESCE(s.title, t.title) AS todo_title
                 FROM sessions s
-                JOIN todos t ON t.id = s.todo_id
+                LEFT JOIN todos t ON t.id = s.todo_id
                 WHERE s.ended_at IS NULL
                 LIMIT 1;
                 """
@@ -46,28 +46,44 @@ def get_sessions(todo_id: int):
 def start_session(todo_id: int):
     with get_conn() as conn:
         with conn.cursor() as cur:
-            # Check todo exists
-            cur.execute("SELECT id FROM todos WHERE id = %s;", (todo_id,))
-            if not cur.fetchone():
+            # Check todo exists and fetch its title
+            cur.execute("SELECT id, title FROM todos WHERE id = %s;", (todo_id,))
+            todo = cur.fetchone()
+            if not todo:
                 raise HTTPException(status_code=404, detail="Todo not found")
 
-            # Guard: block if there's already an open session for this todo
-            cur.execute(
-                "SELECT id FROM sessions WHERE todo_id = %s AND ended_at IS NULL;",
-                (todo_id,)
-            )
+            # Guard: block if there's already any open session globally
+            cur.execute("SELECT id FROM sessions WHERE ended_at IS NULL;")
             if cur.fetchone():
-                raise HTTPException(status_code=409, detail="A session is already in progress for this todo")
+                raise HTTPException(status_code=409, detail="A session is already in progress")
 
             cur.execute(
-                "INSERT INTO sessions (todo_id) VALUES (%s) RETURNING *;",
-                (todo_id,)
+                "INSERT INTO sessions (todo_id, title) VALUES (%s, %s) RETURNING *;",
+                (todo_id, todo["title"])
             )
             row = cur.fetchone()
     return row
 
 
-# end a session for a todo
+# start a freeform session (no todo linked)
+@router.post("/sessions/start", status_code=201)
+def start_freeform_session(body: StartFreeformSession):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            # Guard: block if there's already any open session globally
+            cur.execute("SELECT id FROM sessions WHERE ended_at IS NULL;")
+            if cur.fetchone():
+                raise HTTPException(status_code=409, detail="A session is already in progress")
+
+            cur.execute(
+                "INSERT INTO sessions (title, notes) VALUES (%s, %s) RETURNING *;",
+                (body.title, body.notes)
+            )
+            row = cur.fetchone()
+    return row
+
+
+# end a session
 @router.patch("/sessions/{session_id}/end")
 def end_session(session_id: int, body: EndSession):
     with get_conn() as conn:
@@ -93,3 +109,41 @@ def end_session(session_id: int, body: EndSession):
             )
             row = cur.fetchone()
     return row
+
+
+# get sessions for a UTC timestamp range (frontend converts local day → UTC bounds)
+@router.get("/sessions/today")
+def get_today_sessions(start: str = Query(...), end: str = Query(...)):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT s.*, COALESCE(s.title, t.title) AS todo_title
+                FROM sessions s
+                LEFT JOIN todos t ON t.id = s.todo_id
+                WHERE s.started_at >= %s AND s.started_at < %s
+                ORDER BY s.started_at ASC;
+                """,
+                (start, end)
+            )
+            rows = cur.fetchall()
+    return {"sessions": rows}
+
+
+# get sessions for a UTC timestamp range spanning a week
+@router.get("/sessions/week")
+def get_week_sessions(start: str = Query(...), end: str = Query(...)):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT s.*, COALESCE(s.title, t.title) AS todo_title
+                FROM sessions s
+                LEFT JOIN todos t ON t.id = s.todo_id
+                WHERE s.started_at >= %s AND s.started_at < %s
+                ORDER BY s.started_at ASC;
+                """,
+                (start, end)
+            )
+            rows = cur.fetchall()
+    return {"sessions": rows}
