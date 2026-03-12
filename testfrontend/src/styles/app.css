@@ -181,17 +181,17 @@ body {
 /* ─── Todos Page Layout ───────────────────────────────────── */
 .todos-page {
   display: grid;
-  grid-template-columns: 220px 1fr 310px;
-  gap: 20px;
-  max-width: 1260px;
+  grid-template-columns: 185px 1fr 280px;
+  gap: 16px;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 32px 24px;
+  padding: 28px 20px;
   align-items: start;
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 1050px) {
   .todos-page {
-    grid-template-columns: 1fr 310px;
+    grid-template-columns: 1fr 280px;
   }
   .today-strip { display: none; }
 }
@@ -1371,9 +1371,9 @@ body {
 .today-active-pill {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 10px;
+  gap: 5px;
+  padding: 5px 8px;
+  border-radius: 8px;
   flex-shrink: 0;
   animation: active-pill-pulse 2s ease-in-out infinite;
 }
@@ -1446,16 +1446,16 @@ body {
 }
 
 .today-time-gutter {
-  width: 26px;
+  width: 22px;
   flex-shrink: 0;
   position: relative;
 }
 
 .today-hour-label {
   position: absolute;
-  right: 4px;
-  font-size: 9px;
-  color: #b0b8cc;
+  right: 3px;
+  font-size: 8px;
+  color: #c0c8d8;
   font-weight: 500;
   transform: translateY(-50%);
   white-space: nowrap;
@@ -1466,6 +1466,7 @@ body {
   flex: 1;
   min-width: 0;
   border-left: 1px solid rgba(99, 102, 241, 0.08);
+  padding: 0 2px;
 }
 
 .today-hour-line {
@@ -1774,32 +1775,21 @@ body {
   z-index: 3;
 }
 
-/* Active block: glow + pulsing bottom edge shows it's "growing" */
+/* Active block: pulsing white inset ring — no extra elements, no overflow */
 .cal-block.is-active {
   z-index: 4;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
-  animation: active-block-glow 2s ease-in-out infinite;
-}
-.cal-block.is-active::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.65);
-  border-radius: 0 0 5px 5px;
-  animation: active-edge-pulse 1.4s ease-in-out infinite;
+  animation: active-block-ring 2s ease-in-out infinite;
 }
 
-@keyframes active-block-glow {
-  0%, 100% { filter: brightness(1) saturate(1); box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
-  50%       { filter: brightness(1.08) saturate(1.1); box-shadow: 0 4px 18px rgba(0,0,0,0.28); }
-}
-
-@keyframes active-edge-pulse {
-  0%, 100% { opacity: 0.35; transform: scaleY(1); }
-  50%       { opacity: 1;    transform: scaleY(2); }
+@keyframes active-block-ring {
+  0%, 100% {
+    filter: brightness(1) saturate(1);
+    box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.5), 0 2px 8px rgba(0,0,0,0.18);
+  }
+  50% {
+    filter: brightness(1.1) saturate(1.1);
+    box-shadow: inset 0 0 0 2px rgba(255,255,255,0.85), 0 4px 16px rgba(0,0,0,0.28);
+  }
 }
 
 .cal-block-title {
