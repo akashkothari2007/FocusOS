@@ -4,7 +4,7 @@ const BASE_URL = '';
 
 async function request(path, options = {}) {
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', 'X-API-Key': 'WhatAmIDoingHere123', ...options.headers },
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': import.meta.env.VITE_FOCUSOS_API_KEY, ...options.headers },
     ...options,
   });
   if (res.status === 204) return null;
