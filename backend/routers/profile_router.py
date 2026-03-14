@@ -32,7 +32,7 @@ def update_profile(updates: UpdateProfile):
         raise HTTPException(status_code=400, detail="No fields to update")
 
     # JSONB fields need serialization
-    for key in ("projects", "experiences"):
+    for key in ("projects", "experiences", "newsletters"):
         if key in fields:
             log.debug(f"PATCH /profile: serializing JSONB field '{key}' ({len(fields[key])} items)")
             fields[key] = json.dumps(fields[key])

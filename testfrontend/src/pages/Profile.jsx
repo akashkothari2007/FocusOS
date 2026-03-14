@@ -72,9 +72,11 @@ function RemoveBtn({ onClick }) {
 }
 
 export default function Profile() {
-  const [projects, setProjects]       = useState([]);
-  const [experiences, setExperiences] = useState([]);
-  const [skills, setSkills]           = useState('');
+  const [projects, setProjects]           = useState([]);
+  const [experiences, setExperiences]     = useState([]);
+  const [skills, setSkills]               = useState('');
+  const [newsletters, setNewsletters]     = useState([]);
+  const [newNewsletterEmail, setNewNewsletterEmail] = useState('');
   const [saving, setSaving]           = useState(false);
   const [saveMsg, setSaveMsg]         = useState('');   // '' | 'saved' | error text
   const [authError, setAuthError]     = useState(false);
@@ -95,6 +97,7 @@ export default function Profile() {
     setProjects((profileData.projects || []).map(fromApiProject));
     setExperiences((profileData.experiences || []).map(fromApiExp));
     setSkills(profileData.skills || '');
+    setNewsletters(profileData.newsletters || []);
   }, [profileData]);
 
   // Handle ?auth_error=true from OAuth redirect
@@ -132,6 +135,7 @@ export default function Profile() {
           bullets: fromBulletsText(bulletsText),
         })),
         skills,
+        newsletters,
       };
       await api.updateProfile(payload);
       setSaveMsg('saved');
@@ -300,6 +304,74 @@ export default function Profile() {
           value={skills}
           onChange={(e) => setSkills(e.target.value)}
         />
+      </section>
+
+      {/* ── Newsletters ──────────────────────────────────── */}
+      <section style={{ marginBottom: 40 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: '#111', marginBottom: 4 }}>Newsletters</h3>
+        <p style={{ fontSize: 13, color: '#888', marginBottom: 14 }}>
+          Emails from these senders are auto-classified as news — no AI needed. Add a domain (e.g. <code>tldr.tech</code>) or full address.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {newsletters.map((email, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{
+                flex: 1,
+                padding: '8px 12px',
+                background: 'rgba(20,184,166,0.06)',
+                border: '1.5px solid rgba(20,184,166,0.18)',
+                borderRadius: 10,
+                fontSize: 13,
+                color: '#0f766e',
+                fontWeight: 500,
+              }}>
+                {email}
+              </div>
+              <button
+                type="button"
+                className="btn"
+                style={{ fontSize: 12, padding: '6px 12px', background: '#fff1f2', color: '#dc2626', flexShrink: 0 }}
+                onClick={() => {
+                  const updated = newsletters.filter((_, j) => j !== i);
+                  setNewsletters(updated);
+                  api.updateProfile({ newsletters: updated });
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <input
+              className="input"
+              placeholder="tldr.tech or full@email.com"
+              value={newNewsletterEmail}
+              onChange={(e) => setNewNewsletterEmail(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newNewsletterEmail.trim()) {
+                  const updated = [...newsletters, newNewsletterEmail.trim().toLowerCase()];
+                  setNewsletters(updated);
+                  setNewNewsletterEmail('');
+                  api.updateProfile({ newsletters: updated });
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="btn"
+              style={{ fontSize: 13, padding: '8px 16px', background: 'rgba(20,184,166,0.1)', color: '#0f766e', border: '1.5px solid rgba(20,184,166,0.2)', flexShrink: 0 }}
+              onClick={() => {
+                if (!newNewsletterEmail.trim()) return;
+                const updated = [...newsletters, newNewsletterEmail.trim().toLowerCase()];
+                setNewsletters(updated);
+                setNewNewsletterEmail('');
+                api.updateProfile({ newsletters: updated });
+              }}
+            >
+              + Add
+            </button>
+          </div>
+        </div>
       </section>
 
       {/* ── Connected Accounts ───────────────────────────── */}

@@ -293,7 +293,7 @@ def email_classifier_messages(subject: str, sender: str, preview: str) -> list[d
             "role": "system",
             "content": (
                 "You are a personal email classifier. "
-                "You categorize emails as actionable tasks or worth-reading news/digests. "
+                "You decide if an email requires action from the user. "
                 "Always respond with valid JSON only."
             ),
         },
@@ -303,14 +303,9 @@ def email_classifier_messages(subject: str, sender: str, preview: str) -> list[d
                 f"From: {sender}\nSubject: {subject}\nPreview: {preview}\n\n"
                 "is_task=true ONLY if there is a clear action required: interview to schedule, assignment/form due, "
                 "explicit request from a real person, deadline reminder, application reply needed.\n"
-                "is_news=true for: newsletters, tech digests, industry news, blog roundups, release notes, "
-                "curated content emails (e.g. TLDR, Hacker Newsletter, Morning Brew, GitHub digest).\n"
-                "is_task and is_news are mutually exclusive — if is_task=true, is_news must be false.\n"
-                "Both can be false for promotions, receipts, LinkedIn notifications, automated alerts, spam.\n"
-                "suggested_title: clean short title for both types. "
-                "For tasks use imperative: 'Schedule interview with Shopify'. "
-                "For news use descriptive: 'TLDR Tech — Mar 14' or 'GitHub Changelog: Actions update'.\n"
-                'Return JSON: {"is_task": true/false, "is_news": true/false, "suggested_title": "..."}'
+                "is_task=false for: newsletters, promotions, LinkedIn notifications, receipts, automated alerts, FYI-only emails.\n"
+                "suggested_title: short imperative like 'Schedule interview with Shopify' or 'Submit ECE assignment 2'.\n"
+                'Return JSON: {"is_task": true/false, "suggested_title": "..."}'
             ),
         },
     ]
