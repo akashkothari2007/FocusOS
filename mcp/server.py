@@ -14,9 +14,9 @@ HEADERS = {"X-API-Key": API_KEY, "Content-Type": "application/json"}
 server = Server("focusos")
 
 
-def api(method: str, path: str, **kwargs):
-    with httpx.Client(base_url=BASE_URL, headers=HEADERS, timeout=15) as client:
-        r = client.request(method, path, **kwargs)
+async def api(method: str, path: str, **kwargs):
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=HEADERS, timeout=15) as client:
+        r = await client.request(method, path, **kwargs)
         r.raise_for_status()
         if r.status_code == 204:
             return {}
@@ -168,7 +168,7 @@ async def call_tool(name: str, arguments: dict):
     try:
         # ── Todos ──────────────────────────────────────────────────────────
         if name == "get_todos":
-            data = api("GET", "/api/v1/todos", params={"status": "pending"})
+            data = await api("GET", "/api/v1/todos", params={"status": "pending"})
             todos = data.get("todos", [])
             if not todos:
                 result = "No pending todos"
@@ -183,7 +183,7 @@ async def call_tool(name: str, arguments: dict):
                 result = "\n".join(lines)
 
         elif name == "get_todo_details":
-            data = api("GET", "/api/v1/todos", params={"status": "pending"})
+            data = await api("GET", "/api/v1/todos", params={"status": "pending"})
             todo = fuzzy_find_todo(data.get("todos", []), arguments["project"])
             if not todo:
                 result = f"No todo matching '{arguments['project']}'"
@@ -195,7 +195,7 @@ async def call_tool(name: str, arguments: dict):
                     sub_lines.append(f"  {icon} {s['title']}")
                 desc = todo.get("description") or "(no description)"
                 links = todo.get("links") or []
-                link_str = ", ".join(f"{l['title']}: {l['url']}" for l in links) if links else ""
+                link_str = ", ".join(f"{l.get('label') or l.get('title') or 'link'}: {l['url']}" for l in links) if links else ""
                 result = f"#{todo['id']} {todo['title']}\nDescription: {desc}"
                 if sub_lines:
                     result += "\nSubtasks:\n" + "\n".join(sub_lines)
@@ -211,22 +211,22 @@ async def call_tool(name: str, arguments: dict):
                 payload["description"] = arguments["description"]
             if subtasks_payload:
                 payload["subtasks"] = subtasks_payload
-            data = api("POST", "/api/v1/todos", json=payload)
+            data = await api("POST", "/api/v1/todos", json=payload)
             sub_note = f" with {len(subtask_titles)} subtasks" if subtask_titles else ""
             result = f"Created todo #{data['id']}: {data['title']}{sub_note}"
 
         elif name == "complete_todo":
-            api("PATCH", f"/api/v1/todos/{arguments['todo_id']}", json={"status": "done"})
+            await api("PATCH", f"/api/v1/todos/{arguments['todo_id']}", json={"status": "done"})
             result = f"Marked todo #{arguments['todo_id']} as done"
 
         # ── Subtasks ───────────────────────────────────────────────────────
         elif name == "add_subtask":
-            api("POST", "/api/v1/todos/quick-subtask",
+            await api("POST", "/api/v1/todos/quick-subtask",
                 json={"title": arguments["title"], "project": arguments["project"]})
             result = f"Added subtask '{arguments['title']}' to {arguments['project']}"
 
         elif name == "complete_subtask":
-            data = api("GET", "/api/v1/todos", params={"status": "pending"})
+            data = await api("GET", "/api/v1/todos", params={"status": "pending"})
             todo = fuzzy_find_todo(data.get("todos", []), arguments["project"])
             if not todo:
                 result = f"No todo matching '{arguments['project']}'"
@@ -238,12 +238,12 @@ async def call_tool(name: str, arguments: dict):
                     result = f"No subtask matching '{arguments['subtask']}' in {todo['title']}"
                 else:
                     match["status"] = "done"
-                    api("PATCH", f"/api/v1/todos/{todo['id']}", json={"subtasks": subtasks})
+                    await api("PATCH", f"/api/v1/todos/{todo['id']}", json={"subtasks": subtasks})
                     result = f"✓ Completed subtask '{match['title']}' in {todo['title']}"
 
         # ── Sessions ───────────────────────────────────────────────────────
         elif name == "get_active_session":
-            data = api("GET", "/api/v1/sessions/active")
+            data = await api("GET", "/api/v1/sessions/active")
             if data:
                 title = data.get("todo_title") or data.get("title") or "Untitled"
                 secs = data.get("seconds_spent") or 0
@@ -253,7 +253,7 @@ async def call_tool(name: str, arguments: dict):
                 result = "No active session"
 
         elif name == "start_session":
-            data = api("POST", "/api/v1/todos/quick-session", json={"project": arguments["project"]})
+            data = await api("POST", "/api/v1/todos/quick-session", json={"project": arguments["project"]})
             if data.get("status") == "skipped":
                 result = "Session already active — end it first"
             else:
@@ -262,16 +262,16 @@ async def call_tool(name: str, arguments: dict):
         elif name == "end_session":
             closing_notes = arguments.get("notes")
             if closing_notes:
-                session = api("GET", "/api/v1/sessions/active")
+                session = await api("GET", "/api/v1/sessions/active")
                 if session:
                     existing = session.get("notes") or ""
                     merged = (existing + "\n" + closing_notes).strip()
-                    api("PATCH", f"/api/v1/sessions/{session['id']}/end", json={"notes": merged})
+                    await api("PATCH", f"/api/v1/sessions/{session['id']}/end", json={"notes": merged})
                     data = {"title": session.get("title"), "seconds_spent": session.get("seconds_spent")}
                 else:
-                    data = api("POST", "/api/v1/sessions/quick-end")
+                    data = await api("POST", "/api/v1/sessions/quick-end")
             else:
-                data = api("POST", "/api/v1/sessions/quick-end")
+                data = await api("POST", "/api/v1/sessions/quick-end")
             if data.get("status") == "skipped":
                 result = "No active session to end"
             else:
@@ -279,13 +279,13 @@ async def call_tool(name: str, arguments: dict):
                 result = f"Ended '{data.get('title')}' — {secs // 60}m {secs % 60}s"
 
         elif name == "append_session_notes":
-            session = api("GET", "/api/v1/sessions/active")
+            session = await api("GET", "/api/v1/sessions/active")
             if not session:
                 result = "No active session"
             else:
                 existing = session.get("notes") or ""
                 new_notes = (existing + "\n" + arguments["notes"]).strip()
-                api("PATCH", f"/api/v1/sessions/{session['id']}/notes", json={"notes": new_notes})
+                await api("PATCH", f"/api/v1/sessions/{session['id']}/notes", json={"notes": new_notes})
                 result = "Notes updated"
 
         elif name == "get_sessions_today":
@@ -293,7 +293,7 @@ async def call_tool(name: str, arguments: dict):
             now = datetime.now(timezone.utc)
             start = now.replace(hour=0, minute=0, second=0, microsecond=0)
             end = start + timedelta(days=1)
-            data = api("GET", "/api/v1/sessions/today",
+            data = await api("GET", "/api/v1/sessions/today",
                        params={"start": start.isoformat(), "end": end.isoformat()})
             sessions = data if isinstance(data, list) else data.get("sessions", [])
             if not sessions:
@@ -313,7 +313,7 @@ async def call_tool(name: str, arguments: dict):
         elif name == "get_habits":
             from datetime import date
             today = date.today().isoformat()
-            data = api("GET", "/api/v1/habits/logs", params={"days": 7, "today": today})
+            data = await api("GET", "/api/v1/habits/logs", params={"days": 7, "today": today})
             habits = data.get("habits", [])
             if not habits:
                 result = "No active habits"
@@ -330,14 +330,14 @@ async def call_tool(name: str, arguments: dict):
             from datetime import date
             today_str = date.today().isoformat()
             # get all habits to find ID
-            habits_data = api("GET", "/api/v1/habits", params={"active": "true"})
+            habits_data = await api("GET", "/api/v1/habits", params={"active": "true"})
             habits = habits_data if isinstance(habits_data, list) else habits_data.get("habits", [])
             q = arguments["habit"].lower()
             match = next((h for h in habits if q in h["name"].lower()), None)
             if not match:
                 result = f"No habit matching '{arguments['habit']}'"
             else:
-                api("POST", "/api/v1/habits/logs/toggle",
+                await api("POST", "/api/v1/habits/logs/toggle",
                     json={"habit_id": match["id"], "log_date": today_str})
                 result = f"Toggled habit '{match['name']}' for today"
 

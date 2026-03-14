@@ -82,3 +82,19 @@ async def refresh_access_token() -> str:
 
     log.info("Access token refreshed successfully")
     return access_token
+
+
+async def fetch_body(email_id: str, access_token: str) -> str:
+    """Fetch the plain-text body of a single email by ID."""
+    import httpx
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"https://graph.microsoft.com/v1.0/me/messages/{email_id}",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Prefer": 'outlook.body-content-type="text"',
+            },
+            params={"$select": "body"},
+        )
+        r.raise_for_status()
+        return r.json()["body"]["content"]

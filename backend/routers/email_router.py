@@ -7,7 +7,7 @@ from typing import Optional
 from ms_graph.scanner import fetch_recent_emails
 from ms_graph.classifier import classify_emails
 import logging
-
+from scheduler import run_email_scan
 log = logging.getLogger("email_router")
 router = APIRouter()
 
