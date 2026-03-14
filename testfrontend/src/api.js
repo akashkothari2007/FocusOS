@@ -148,4 +148,7 @@ export const api = {
   // Email
   getEmailStatus: () =>
     request('/auth/status'),
+
+  getNews: () =>
+    request('/api/v1/news'),
 };

@@ -1854,6 +1854,182 @@ body {
   text-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 
+/* ─── News Digest ─────────────────────────────────────────── */
+.news-digest {
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.news-digest-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px;
+}
+
+.news-digest-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.news-digest-icon {
+  font-size: 14px;
+  color: #14b8a6;
+}
+
+.news-digest-counter {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 500;
+  background: rgba(148, 163, 184, 0.1);
+  padding: 2px 9px;
+  border-radius: 20px;
+}
+
+.news-card {
+  border-radius: 18px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-top: 3px solid #14b8a6 !important;
+}
+
+.news-card-content {
+  padding: 20px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.news-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a2e;
+  line-height: 1.35;
+}
+
+.news-card-date {
+  font-size: 11px;
+  font-weight: 500;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.news-card-body {
+  margin-top: 8px;
+  width: 100%;
+  height: 340px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.news-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 14px;
+  border-top: 1px solid rgba(20, 184, 166, 0.1);
+  background: rgba(20, 184, 166, 0.03);
+}
+
+.news-nav-btn {
+  background: none;
+  border: 1.5px solid rgba(20, 184, 166, 0.25);
+  color: #14b8a6;
+  font-size: 15px;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  flex-shrink: 0;
+}
+.news-nav-btn:hover:not(:disabled) {
+  background: rgba(20, 184, 166, 0.1);
+  border-color: #14b8a6;
+}
+.news-nav-btn:active:not(:disabled) { transform: scale(0.92); }
+.news-nav-btn:disabled { opacity: 0.25; cursor: default; }
+
+.news-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.news-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(20, 184, 166, 0.2);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s, transform 0.2s, width 0.2s;
+  flex-shrink: 0;
+}
+.news-dot.active {
+  background: #14b8a6;
+  width: 20px;
+  border-radius: 4px;
+  transform: none;
+}
+.news-dot:hover:not(.active) { background: rgba(20, 184, 166, 0.4); }
+
+.news-dots-more {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1;
+  margin-left: 2px;
+}
+
+/* Slide animations */
+@keyframes news-slide-in-fwd {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes news-slide-in-back {
+  from { opacity: 0; transform: translateX(-28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.news-slide-forward { animation: news-slide-in-fwd 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
+.news-slide-back    { animation: news-slide-in-back 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* Loading skeleton */
+.news-card-loading {
+  padding: 20px;
+  gap: 12px;
+  display: flex;
+  flex-direction: column;
+}
+.news-skeleton-title,
+.news-skeleton-body {
+  background: linear-gradient(90deg, rgba(99,102,241,0.06) 25%, rgba(99,102,241,0.12) 50%, rgba(99,102,241,0.06) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 8px;
+}
+.news-skeleton-title { height: 18px; width: 70%; }
+.news-skeleton-body { height: 13px; width: 100%; }
+.news-skeleton-body.short { width: 55%; }
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
 /* Fixed-position popover (won't be clipped by overflow) */
 .session-popover-fixed {
   position: fixed;

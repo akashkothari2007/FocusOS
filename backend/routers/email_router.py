@@ -67,3 +67,24 @@ from ms_graph.graph_client import refresh_access_token
 async def manual_refresh():
     token = await refresh_access_token()
     return {"message": "Token refreshed", "expires_soon": False}
+
+
+@router.get("/api/v1/news")
+def get_news():
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT email_id, title, body, scanned_at
+                FROM scanned_email_ids
+                WHERE category = 'news' AND body IS NOT NULL AND title IS NOT NULL
+                  AND scanned_at >= NOW() - INTERVAL '2 days'
+                ORDER BY scanned_at DESC
+                LIMIT 30
+            """)
+            rows = cur.fetchall()
+    return [dict(r) for r in rows]
+
+@router.get("/emails/test-fetch")
+async def test_fetch():
+    await run_email_scan()
+    return {"message": "Email scan started"}
