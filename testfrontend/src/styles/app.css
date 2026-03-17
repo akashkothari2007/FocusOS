@@ -197,7 +197,19 @@ body {
 @media (max-width: 680px) {
   .todos-page {
     grid-template-columns: 1fr;
+    padding: 14px 12px;
   }
+  /* Reorder: todos first, habits second, today-strip hidden */
+  .todos-main { order: 1; }
+  .todos-sidebar { order: 2; position: static; }
+  .today-strip { display: none !important; }
+  .navbar { padding: 0 14px; gap: 8px; }
+  .navbar-links { gap: 1px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .nav-link { font-size: 12px; padding: 5px 9px; white-space: nowrap; }
+  .session-bar { padding: 10px 14px; }
+  /* Calendar: remove fixed viewport height so it scrolls naturally on mobile */
+  .calendar-page { height: auto; overflow: visible; }
+  .cal-scroll-body { flex: none; height: 600px; overflow-y: auto; overflow-x: auto; }
 }
 
 .todos-main {

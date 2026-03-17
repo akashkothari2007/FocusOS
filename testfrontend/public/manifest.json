@@ -1,0 +1,17 @@
+{
+  "name": "FocusOS",
+  "short_name": "FocusOS",
+  "description": "Personal productivity dashboard",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#eef0f8",
+  "theme_color": "#6366f1",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

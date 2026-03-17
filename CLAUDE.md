@@ -4,6 +4,17 @@ This file is the single source of truth for working on this codebase. Update it 
 
 ---
 
+## Claude Session Management (MCP)
+
+When starting work on a FocusOS task/subtask, **automatically**:
+1. Use `mcp__focusos__start_session` for the relevant todo (or freeform if no matching todo)
+2. When a subtask is completed, use `mcp__focusos__complete_subtask` to check it off
+3. Append meaningful notes with `mcp__focusos__append_session_notes` summarizing what was done
+
+Do this proactively — don't wait for the user to ask.
+
+---
+
 ## Project Overview
 
 Personal productivity + job-search dashboard. Backend is production on Railway, frontend is a local Vite dev server proxying to Railway (or localhost when developing backend).
