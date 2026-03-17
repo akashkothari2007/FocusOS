@@ -10,12 +10,69 @@ import SessionBar from './components/SessionBar';
 import { api } from './api';
 import './styles/app.css';
 
+function ApiKeyGate({ onUnlock }) {
+  const [key, setKey] = useState('');
+  const [error, setError] = useState('');
+  const [checking, setChecking] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!key.trim()) return;
+    setChecking(true);
+    setError('');
+    try {
+      const res = await fetch('/api/v1/todos', { headers: { 'X-API-Key': key.trim() } });
+      if (res.ok) {
+        localStorage.setItem('focusos_api_key', key.trim());
+        onUnlock();
+      } else {
+        setError('Wrong key, try again');
+      }
+    } catch {
+      setError('Could not reach server');
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: '#eef0f8',
+    }}>
+      <div className="glass-card" style={{ width: 360, padding: '36px 32px' }}>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>FocusOS</h2>
+        <p style={{ fontSize: 14, color: '#475569', marginBottom: 24 }}>Enter your API key to continue.</p>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <input
+            className="input"
+            type="password"
+            placeholder="API key"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            autoFocus
+          />
+          {error && <p style={{ fontSize: 13, color: '#e11d48', margin: 0 }}>{error}</p>}
+          <button className="btn btn-primary" type="submit" disabled={checking}>
+            {checking ? 'Checking...' : 'Unlock'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('focusos_api_key'));
   // activeSession: { sessionId, todoId, todoTitle, startedAt }
   const [activeSession, setActiveSession] = useState(null);
 
   // Restore any in-progress session on load
   useEffect(() => {
+    if (!apiKey) return;
     api.getActiveSession().then((session) => {
       if (session) {
         setActiveSession({
@@ -26,7 +83,11 @@ export default function App() {
         });
       }
     }).catch(() => {});
-  }, []);
+  }, [apiKey]);
+
+  if (!apiKey) {
+    return <ApiKeyGate onUnlock={() => setApiKey(localStorage.getItem('focusos_api_key'))} />;
+  }
 
   return (
     <BrowserRouter>

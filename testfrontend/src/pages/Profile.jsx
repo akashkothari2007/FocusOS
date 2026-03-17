@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 
@@ -68,6 +68,55 @@ function RemoveBtn({ onClick }) {
         Remove
       </button>
     </div>
+  );
+}
+
+function ApiKeySection() {
+  const stored = localStorage.getItem('focusos_api_key') || '';
+  const masked = stored.length > 4 ? '••••••••' + stored.slice(-4) : stored ? '••••' : '';
+  const [newKey, setNewKey] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  function handleSaveKey() {
+    if (!newKey.trim()) return;
+    localStorage.setItem('focusos_api_key', newKey.trim());
+    setNewKey('');
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  function handleClear() {
+    localStorage.removeItem('focusos_api_key');
+    window.location.reload();
+  }
+
+  return (
+    <section style={{ marginBottom: 40 }}>
+      <h3 style={{ fontSize: 16, fontWeight: 700, color: '#111', marginBottom: 4 }}>API Key</h3>
+      <p style={{ fontSize: 13, color: '#888', marginBottom: 14 }}>
+        Current key: <span style={{ fontFamily: 'monospace', color: '#475569' }}>{masked || 'none'}</span>
+      </p>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input
+          className="input"
+          type="password"
+          placeholder="New API key"
+          value={newKey}
+          onChange={(e) => setNewKey(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSaveKey()}
+        />
+        <button className="btn btn-primary" style={{ flexShrink: 0 }} onClick={handleSaveKey}>
+          {saved ? 'Saved!' : 'Save'}
+        </button>
+        <button
+          className="btn"
+          style={{ flexShrink: 0, background: '#fff1f2', color: '#dc2626', fontSize: 13, padding: '8px 14px' }}
+          onClick={handleClear}
+        >
+          Clear &amp; re-enter
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -373,6 +422,9 @@ export default function Profile() {
           </div>
         </div>
       </section>
+
+      {/* ── API Key ──────────────────────────────────────── */}
+      <ApiKeySection />
 
       {/* ── Connected Accounts ───────────────────────────── */}
       <section style={{ marginBottom: 40 }}>
