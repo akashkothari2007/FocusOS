@@ -292,8 +292,8 @@ def email_classifier_messages(subject: str, sender: str, preview: str) -> list[d
         {
             "role": "system",
             "content": (
-                "You are a personal email classifier. "
-                "You decide if an email requires action from the user. "
+                "You are a personal email classifier for a software engineering student. "
+                "You decide if an email requires a specific, personal action. "
                 "Always respond with valid JSON only."
             ),
         },
@@ -301,9 +301,20 @@ def email_classifier_messages(subject: str, sender: str, preview: str) -> list[d
             "role": "user",
             "content": (
                 f"From: {sender}\nSubject: {subject}\nPreview: {preview}\n\n"
-                "is_task=true ONLY if there is a clear action required: interview to schedule, assignment/form due, "
-                "explicit request from a real person, deadline reminder, application reply needed.\n"
-                "is_task=false for: newsletters, promotions, LinkedIn notifications, receipts, automated alerts, FYI-only emails.\n"
+                "is_task=true ONLY if ALL of these are true:\n"
+                "  - A specific action is needed from this person specifically (not a generic CTA)\n"
+                "  - It is time-sensitive or will be missed if ignored\n"
+                "  - Examples: interview to schedule, assignment/form due, document to sign, "
+                "government/financial notice to review, survey they were personally invited to complete, "
+                "reply requested from a real person, deadline reminder for something already in progress.\n\n"
+                "is_task=false for ALL of these — no exceptions:\n"
+                "  - LinkedIn: invitations, connection requests, 'X viewed your profile', job suggestions, endorsements\n"
+                "  - Job boards (Indeed, LinkedIn Jobs, Glassdoor, ZipRecruiter, etc.): any automated job alert or recommendation\n"
+                "  - Marketing emails: 'sign up', 'join now', 'complete your profile', 'upgrade', 'try for free', promotional offers\n"
+                "  - Newsletters, digests, blog posts, product updates\n"
+                "  - Receipts, shipping notifications, order confirmations\n"
+                "  - Automated alerts or FYI-only emails with no personal ask\n"
+                "  - Social media notifications\n\n"
                 "suggested_title: short imperative like 'Schedule interview with Shopify' or 'Submit ECE assignment 2'.\n"
                 'Return JSON: {"is_task": true/false, "suggested_title": "..."}'
             ),
