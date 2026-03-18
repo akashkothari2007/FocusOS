@@ -9,9 +9,31 @@ from ms_graph.graph_client import refresh_access_token, fetch_body
 log = logging.getLogger("scheduler")
 
 
+def cleanup_old_todos():
+    """Delete done todos whose total session time is under 30 minutes."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                DELETE FROM todos
+                WHERE status = 'done'
+                AND id IN (
+                    SELECT t.id
+                    FROM todos t
+                    LEFT JOIN sessions s ON s.todo_id = t.id
+                    GROUP BY t.id
+                    HAVING COALESCE(SUM(s.seconds_spent), 0) < 1800
+                )
+            """)
+            deleted = cur.rowcount
+        conn.commit()
+    log.info(f"Cleanup: deleted {deleted} low-effort done todos")
+
+
 async def run_email_scan():
     log.info("=== Email scan starting ===")
     try:
+        cleanup_old_todos()
+
         # Prune stale entries older than 3 days
         with get_conn() as conn:
             with conn.cursor() as cur:
