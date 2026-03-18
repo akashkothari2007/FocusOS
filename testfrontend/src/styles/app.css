@@ -310,6 +310,13 @@ body {
   text-overflow: ellipsis;
 }
 
+.todo-title-input {
+  font-size: 15px;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+}
+
 .due-date {
   font-size: 12px;
   color: #7c3aed;

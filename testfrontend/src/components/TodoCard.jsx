@@ -81,6 +81,8 @@ function SortableSubtaskRow({ subtask, index, onToggle, onDelete }) {
 
 export default function TodoCard({ todo, borderColor, isActiveSession, onStartSession, onMarkDone, onUpdate, dragHandleProps }) {
   const [expanded, setExpanded] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [title, setTitle] = useState(todo.title || '');
   const [editingDesc, setEditingDesc] = useState(false);
   const [desc, setDesc] = useState(todo.description || '');
   const [newSubtask, setNewSubtask] = useState('');
@@ -106,6 +108,18 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
     document.addEventListener('mousedown', onMouseDown);
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [linksOpen]);
+
+  async function saveTitle() {
+    setEditingTitle(false);
+    const trimmed = title.trim();
+    if (!trimmed || trimmed === todo.title) return;
+    try {
+      const updated = await api.updateTodo(todo.id, { title: trimmed });
+      onUpdate(updated);
+    } catch {
+      setTitle(todo.title || '');
+    }
+  }
 
   async function saveDescription() {
     setEditingDesc(false);
@@ -197,7 +211,23 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
         {...(dragHandleProps || {})}
       >
         <div className="todo-card-title-row">
-          <span className="todo-title">{todo.title}</span>
+          {editingTitle ? (
+            <input
+              className="input input-sm todo-title-input"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setTitle(todo.title); setEditingTitle(false); } }}
+              onClick={(e) => e.stopPropagation()}
+              autoFocus
+            />
+          ) : (
+            <span
+              className="todo-title"
+              onDoubleClick={(e) => { e.stopPropagation(); setEditingTitle(true); }}
+              title="Double-click to rename"
+            >{title}</span>
+          )}
           {todo.due_date && <span className="due-date">{formatDate(todo.due_date)}</span>}
         </div>
         <div className="links-btn-wrap" ref={linksRef}>
