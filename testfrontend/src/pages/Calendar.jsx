@@ -34,7 +34,6 @@ function formatHour(h) {
   return `${h - 12}pm`;
 }
 
-// Use actual duration (no inflated minimum) to prevent visual overlap
 function getBlockStyle(session, nowMs) {
   const start = new Date(session.started_at);
   const startMin = start.getHours() * 60 + start.getMinutes();
@@ -59,7 +58,19 @@ function getBlockStyle(session, nowMs) {
 export default function Calendar({ activeSession, setActiveSession }) {
   const queryClient = useQueryClient();
   const todayStr = toLocalDateStr(new Date());
+
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+
+  // Desktop: week navigation
   const [weekStart, setWeekStart] = useState(() => toLocalDateStr(getMonday(new Date())));
+  // Mobile: single day navigation
+  const [selectedDay, setSelectedDay] = useState(todayStr);
+
   const [popover, setPopover] = useState(null);
   const [popoverNotes, setPopoverNotes] = useState('');
   const [showFreeformInput, setShowFreeformInput] = useState(false);
@@ -68,18 +79,15 @@ export default function Calendar({ activeSession, setActiveSession }) {
   const [nowMs, setNowMs] = useState(Date.now());
   const scrollRef = useRef(null);
 
-  // Update every second — drives active block growth + now-line
   useEffect(() => {
     const id = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
 
-  // Scroll to 8am on mount
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 8 * HOUR_PX - 40;
   }, []);
 
-  // Close popover on outside click
   useEffect(() => {
     if (!popover) return;
     function handle() { setPopover(null); }
@@ -87,40 +95,61 @@ export default function Calendar({ activeSession, setActiveSession }) {
     return () => document.removeEventListener('click', handle);
   }, [popover]);
 
-  // Refresh when active session changes
   useEffect(() => {
     queryClient.invalidateQueries({ queryKey: ['sessions', 'week'] });
   }, [activeSession?.sessionId, queryClient]);
 
+  // On mobile, fetch the week containing the selected day
+  const activeWeekStart = isMobile
+    ? toLocalDateStr(getMonday(new Date(selectedDay + 'T00:00:00')))
+    : weekStart;
+
   const { data } = useQuery({
-    queryKey: ['sessions', 'week', weekStart],
-    queryFn: () => api.getWeekSessions(weekStart).then((d) => d.sessions),
+    queryKey: ['sessions', 'week', activeWeekStart],
+    queryFn: () => api.getWeekSessions(activeWeekStart).then((d) => d.sessions),
   });
   const sessions = data ?? [];
 
   const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(weekStart + 'T00:00:00');
+    const d = new Date(activeWeekStart + 'T00:00:00');
     d.setDate(d.getDate() + i);
     return toLocalDateStr(d);
   });
 
+  // Desktop nav
   function prevWeek() {
     const d = new Date(weekStart + 'T00:00:00');
     d.setDate(d.getDate() - 7);
     setWeekStart(toLocalDateStr(d));
   }
-
   function nextWeek() {
     const d = new Date(weekStart + 'T00:00:00');
     d.setDate(d.getDate() + 7);
     setWeekStart(toLocalDateStr(d));
   }
-
   function weekLabel() {
     const s = new Date(weekStart + 'T00:00:00');
     const e = new Date(weekStart + 'T00:00:00');
     e.setDate(e.getDate() + 6);
     return `${s.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${e.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  }
+
+  // Mobile nav
+  function prevDay() {
+    const d = new Date(selectedDay + 'T00:00:00');
+    d.setDate(d.getDate() - 1);
+    setSelectedDay(toLocalDateStr(d));
+  }
+  function nextDay() {
+    const d = new Date(selectedDay + 'T00:00:00');
+    d.setDate(d.getDate() + 1);
+    setSelectedDay(toLocalDateStr(d));
+  }
+  function dayLabel() {
+    const d = new Date(selectedDay + 'T00:00:00');
+    const isToday = selectedDay === todayStr;
+    const label = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    return isToday ? `Today, ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : label;
   }
 
   async function handleStartFreeform() {
@@ -136,7 +165,7 @@ export default function Calendar({ activeSession, setActiveSession }) {
     try {
       const session = await api.startFreeformSession(title);
       setActiveSession({ sessionId: session.id, todoId: null, todoTitle: title, startedAt: session.started_at });
-      queryClient.invalidateQueries({ queryKey: ['sessions', 'week', weekStart] });
+      queryClient.invalidateQueries({ queryKey: ['sessions', 'week', activeWeekStart] });
     } catch {
       setActiveSession(null);
     } finally {
@@ -160,7 +189,7 @@ export default function Calendar({ activeSession, setActiveSession }) {
     e.stopPropagation();
     await api.deleteSession(s.id);
     if (activeSession?.sessionId === s.id) setActiveSession(null);
-    queryClient.invalidateQueries({ queryKey: ['sessions', 'week', weekStart] });
+    queryClient.invalidateQueries({ queryKey: ['sessions', 'week', activeWeekStart] });
   }
 
   function handleBlockClick(e, s) {
@@ -168,20 +197,32 @@ export default function Calendar({ activeSession, setActiveSession }) {
     const rect = e.currentTarget.getBoundingClientRect();
     setPopover({
       session: s,
-      x: rect.right + 8,
-      y: Math.min(rect.top, window.innerHeight - 160),
+      x: isMobile ? 16 : rect.right + 8,
+      y: Math.min(rect.top, window.innerHeight - 200),
     });
   }
 
   const nowDate = new Date(nowMs);
   const nowLinePx = nowDate.getHours() * 60 + nowDate.getMinutes();
 
+  const displayDays = isMobile ? [selectedDay] : weekDays;
+
   return (
     <div className="calendar-page">
       <div className="calendar-header">
-        <button className="cal-nav-btn" onClick={prevWeek}>‹ Prev</button>
-        <span className="cal-week-label">{weekLabel()}</span>
-        <button className="cal-nav-btn" onClick={nextWeek}>Next ›</button>
+        {isMobile ? (
+          <>
+            <button className="cal-nav-btn" onClick={prevDay}>‹</button>
+            <span className="cal-week-label">{dayLabel()}</span>
+            <button className="cal-nav-btn" onClick={nextDay}>›</button>
+          </>
+        ) : (
+          <>
+            <button className="cal-nav-btn" onClick={prevWeek}>‹ Prev</button>
+            <span className="cal-week-label">{weekLabel()}</span>
+            <button className="cal-nav-btn" onClick={nextWeek}>Next ›</button>
+          </>
+        )}
         <button
           className="cal-start-btn"
           onClick={() => { setShowFreeformInput((v) => !v); setFreeformTitle(''); }}
@@ -209,20 +250,22 @@ export default function Calendar({ activeSession, setActiveSession }) {
         </div>
       )}
 
-      {/* Fixed day headers */}
-      <div className="cal-header-row">
-        <div className="cal-gutter-spacer" />
-        {weekDays.map((dayStr, i) => {
-          const isToday = dayStr === todayStr;
-          const dayNum = new Date(dayStr + 'T00:00:00').getDate();
-          return (
-            <div key={dayStr} className={`cal-day-header-cell${isToday ? ' is-today' : ''}`}>
-              <span className="cal-day-name">{DAY_NAMES[i]}</span>
-              <span className={`cal-day-num${isToday ? ' is-today' : ''}`}>{dayNum}</span>
-            </div>
-          );
-        })}
-      </div>
+      {/* Fixed day headers — hidden on mobile (single day shown in main header) */}
+      {!isMobile && (
+        <div className="cal-header-row">
+          <div className="cal-gutter-spacer" />
+          {weekDays.map((dayStr, i) => {
+            const isToday = dayStr === todayStr;
+            const dayNum = new Date(dayStr + 'T00:00:00').getDate();
+            return (
+              <div key={dayStr} className={`cal-day-header-cell${isToday ? ' is-today' : ''}`}>
+                <span className="cal-day-name">{DAY_NAMES[i]}</span>
+                <span className={`cal-day-num${isToday ? ' is-today' : ''}`}>{dayNum}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Scrollable time grid */}
       <div className="cal-scroll-body" ref={scrollRef}>
@@ -235,8 +278,8 @@ export default function Calendar({ activeSession, setActiveSession }) {
             ))}
           </div>
 
-          <div className="cal-columns">
-            {weekDays.map((dayStr) => {
+          <div className={`cal-columns${isMobile ? ' cal-columns--single' : ''}`}>
+            {displayDays.map((dayStr) => {
               const isToday = dayStr === todayStr;
               const daySessions = sessions.filter(
                 (s) => toLocalDateStr(new Date(s.started_at)) === dayStr

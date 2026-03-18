@@ -1785,6 +1785,9 @@ body {
   grid-template-columns: repeat(7, 1fr);
   border-left: 1px solid rgba(99, 102, 241, 0.08);
 }
+.cal-columns--single {
+  grid-template-columns: 1fr;
+}
 
 .cal-day-col {
   border-right: 1px solid rgba(99, 102, 241, 0.08);
