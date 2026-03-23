@@ -145,6 +145,19 @@ export const api = {
   startFreeformSession: (title) =>
     request('/api/v1/sessions/start', { method: 'POST', body: JSON.stringify({ title }) }),
 
+  // Routines
+  getRoutines: () =>
+    request('/api/v1/routines'),
+
+  createRoutine: (name) =>
+    request('/api/v1/routines', { method: 'POST', body: JSON.stringify({ name, items: [] }) }),
+
+  updateRoutine: (id, data) =>
+    request(`/api/v1/routines/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  deleteRoutine: (id) =>
+    request(`/api/v1/routines/${id}`, { method: 'DELETE' }),
+
   // Email
   getEmailStatus: () =>
     request('/auth/status'),

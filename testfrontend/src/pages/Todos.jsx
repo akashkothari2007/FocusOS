@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Routines from '../components/Routines';
 import {
   DndContext,
   DragOverlay,
@@ -52,6 +53,7 @@ function SortableTodoItem({ todo, borderColor, ...cardProps }) {
 export default function Todos({ activeSession, setActiveSession }) {
   const queryClient = useQueryClient();
   const [activeId, setActiveId] = useState(null);
+  const [view, setView] = useState('todos');
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -145,6 +147,12 @@ export default function Todos({ activeSession, setActiveSession }) {
     <div className="todos-page">
       <TodayStrip activeSession={activeSession} setActiveSession={setActiveSession} />
       <div className="todos-main">
+        <div className="view-toggle">
+          <button className={`view-toggle-btn${view === 'todos' ? ' active' : ''}`} onClick={() => setView('todos')}>Todos</button>
+          <button className={`view-toggle-btn${view === 'routines' ? ' active' : ''}`} onClick={() => setView('routines')}>Routines</button>
+        </div>
+
+        {view === 'routines' ? <Routines /> : <>
         <AddTodoForm />
         <div className="todo-list">
           {/* Pinned (dated) todos — not draggable */}
@@ -209,6 +217,7 @@ export default function Todos({ activeSession, setActiveSession }) {
         </div>
 
         <NewsDigest />
+        </>}
       </div>
       <aside className="todos-sidebar">
         <HabitTracker />
