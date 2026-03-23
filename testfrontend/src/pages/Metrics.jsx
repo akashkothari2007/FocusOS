@@ -25,7 +25,7 @@ function formatTime(dt) {
 
 // ─── Todo Sessions Section ────────────────────────────────────────────────────
 
-function TodoSessionRow({ todo, onDelete }) {
+function TodoSessionRow({ todo, onDelete, onRestore }) {
   const [expanded, setExpanded] = useState(false);
   const [sessions, setSessions] = useState(null);
 
@@ -63,6 +63,13 @@ function TodoSessionRow({ todo, onDelete }) {
             <span className="metrics-session-count">{sessions.length} session{sessions.length !== 1 ? 's' : ''}</span>
           )}
           <span className="metrics-chevron">{expanded ? '▲' : '▼'}</span>
+          {todo.status === 'done' && (
+            <button
+              className="metrics-todo-restore"
+              onClick={(e) => { e.stopPropagation(); onRestore(todo.id); }}
+              title="Restore to pending"
+            >↩</button>
+          )}
           <button className="metrics-todo-delete" onClick={handleDelete} title="Delete todo">×</button>
         </div>
       </button>
@@ -259,6 +266,11 @@ export default function Metrics() {
               key={todo.id}
               todo={todo}
               onDelete={(id) => queryClient.setQueryData(['todos', 'all'], (old = []) => old.filter((t) => t.id !== id))}
+              onRestore={(id) => {
+                queryClient.setQueryData(['todos', 'all'], (old = []) => old.map((t) => t.id === id ? { ...t, status: 'pending' } : t));
+                queryClient.invalidateQueries({ queryKey: ['todos', 'pending'] });
+                api.updateTodo(id, { status: 'pending' });
+              }}
             />
           ))}
         </div>

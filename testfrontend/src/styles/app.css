@@ -1023,6 +1023,21 @@ body {
 }
 .metrics-todo-row:hover .metrics-todo-delete { opacity: 1; }
 .metrics-todo-delete:hover { color: #e11d48; }
+.metrics-todo-restore {
+  background: none;
+  border: none;
+  color: #cbd5e1;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 5px;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s;
+  font-family: inherit;
+}
+.metrics-todo-row:hover .metrics-todo-restore { opacity: 1; }
+.metrics-todo-restore:hover { color: #6366f1; }
 
 .metrics-sessions-list {
   padding: 4px 14px 12px;
