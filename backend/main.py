@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from db import get_conn
-from routers import todo_router, session_router, job_router, doc_router, profile_router, habit_router, email_router
+from routers import todo_router, session_router, job_router, doc_router, profile_router, habit_router, email_router, routine_router
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from scheduler import run_email_scan
 
@@ -88,5 +88,6 @@ app.include_router(doc_router.router)
 app.include_router(profile_router.router)
 app.include_router(habit_router.router)
 app.include_router(email_router.router)
+app.include_router(routine_router.router)
 
  
