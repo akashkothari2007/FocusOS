@@ -287,6 +287,42 @@ def resume_messages(
         },
     ]
 
+def suggest_task_messages(todos: list[dict], recent_sessions: list[dict], now_str: str) -> list[dict]:
+    todos_block = "\n".join(
+        f"- id={t['id']} | {t['title']}"
+        + (f" | due: {str(t['due_date'])[:10]}" if t.get("due_date") else "")
+        + (f" | subtasks: {sum(1 for s in (t.get('subtasks') or []) if s.get('status') != 'done')}/{len(t.get('subtasks') or [])} pending" if t.get("subtasks") else "")
+        for t in todos
+    )
+    sessions_block = "\n".join(
+        f"- {s['title']} | {str(s['started_at'])[:16]} | {round(s.get('seconds_spent', 0) / 60)}min"
+        for s in recent_sessions
+    ) or "No recent sessions."
+
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are a brutally honest productivity assistant. "
+                "Pick the single best task to work on right now based on recency, urgency, and momentum. "
+                "Always respond with valid JSON only."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Current time: {now_str}\n\n"
+                f"Pending todos:\n{todos_block}\n\n"
+                f"Recent work sessions (last 7 days):\n{sessions_block}\n\n"
+                "Pick the ONE todo the user should work on right now. "
+                "Favor: tasks not touched recently, tasks with due dates, tasks with momentum (recently started). "
+                "Give a short punchy reason (max 12 words) — be direct, no fluff. "
+                'Return JSON: {"todo_id": <int>, "reason": "<short reason>"}'
+            ),
+        },
+    ]
+
+
 def email_classifier_messages(subject: str, sender: str, preview: str) -> list[dict]:
     return [
         {

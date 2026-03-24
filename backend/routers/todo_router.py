@@ -1,8 +1,14 @@
 import json
+import logging
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from typing import Optional, Literal
 from db import get_conn
 from models.todo_models import CreateTodo, UpdateTodo, Link, ReorderTodos, QuickTodo
+from ai import chat_json
+from prompts import suggest_task_messages
+
+log = logging.getLogger("todo_router")
 
 router = APIRouter(prefix="/api/v1")
 
@@ -97,6 +103,53 @@ def delete_todo(todo_id: int):
             if not row:
                 raise HTTPException(status_code=404, detail="Todo not found")
     return  # 204 = no content
+
+@router.get("/todos/suggest")
+def suggest_todo():
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            # Return null if a session is already active
+            cur.execute("SELECT id FROM sessions WHERE ended_at IS NULL LIMIT 1;")
+            if cur.fetchone():
+                return {"suggestion": None}
+
+            # Fetch pending todos
+            cur.execute(
+                "SELECT id, title, due_date, subtasks FROM todos WHERE status = 'pending' ORDER BY (due_date IS NULL) ASC, due_date ASC, sort_order ASC;"
+            )
+            todos = cur.fetchall()
+
+            if not todos:
+                return {"suggestion": None}
+
+            # Fetch recent sessions (last 7 days)
+            cur.execute(
+                """
+                SELECT COALESCE(t.title, s.title) AS title, s.started_at, s.seconds_spent
+                FROM sessions s
+                LEFT JOIN todos t ON t.id = s.todo_id
+                WHERE s.started_at >= NOW() - INTERVAL '7 days'
+                  AND s.ended_at IS NOT NULL
+                ORDER BY s.started_at DESC
+                LIMIT 20;
+                """
+            )
+            recent_sessions = cur.fetchall()
+
+    now_str = datetime.now(timezone.utc).strftime("%A %Y-%m-%d %H:%M UTC")
+    try:
+        result = chat_json(suggest_task_messages(todos, recent_sessions, now_str))
+        todo_id = result.get("todo_id")
+        reason = result.get("reason", "")
+        # Find the matching todo title
+        todo_map = {t["id"]: t["title"] for t in todos}
+        if todo_id not in todo_map:
+            return {"suggestion": None}
+        return {"suggestion": {"todo_id": todo_id, "title": todo_map[todo_id], "reason": reason}}
+    except Exception as e:
+        log.error(f"suggest_todo AI call failed: {e}")
+        return {"suggestion": None}
+
 
 @router.post("/todos/quick-subtask")
 def quick_subtask(body: QuickTodo):
