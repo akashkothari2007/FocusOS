@@ -287,37 +287,40 @@ def resume_messages(
         },
     ]
 
-def suggest_task_messages(todos: list[dict], recent_sessions: list[dict], now_str: str) -> list[dict]:
-    todos_block = "\n".join(
-        f"- id={t['id']} | {t['title']}"
-        + (f" | due: {str(t['due_date'])[:10]}" if t.get("due_date") else "")
-        + (f" | subtasks: {sum(1 for s in (t.get('subtasks') or []) if s.get('status') != 'done')}/{len(t.get('subtasks') or [])} pending" if t.get("subtasks") else "")
-        for t in todos
-    )
-    sessions_block = "\n".join(
-        f"- {s['title']} | {str(s['started_at'])[:16]} | {round(s.get('seconds_spent', 0) / 60)}min"
-        for s in recent_sessions
-    ) or "No recent sessions."
+def suggest_task_messages(todos: list[dict], stats: dict, now_str: str) -> list[dict]:
+    def fmt_todo(t):
+        s = stats.get(t["id"])
+        parts = [f"id={t['id']}", t["title"]]
+        if t.get("due_date"):
+            parts.append(f"due:{str(t['due_date'])[:10]}")
+        pending_sub = sum(1 for x in (t.get("subtasks") or []) if x.get("status") != "done")
+        if pending_sub:
+            parts.append(f"{pending_sub} subtasks")
+        if s:
+            hrs = round(s["total_seconds"] / 3600, 1)
+            last = str(s["last_session"])[:10]
+            parts.append(f"{s['session_count']}s/{hrs}h/last:{last}")
+        else:
+            parts.append("never started")
+        return " | ".join(parts)
+
+    todos_block = "\n".join(fmt_todo(t) for t in todos)
 
     return [
         {
             "role": "system",
-            "content": (
-                "You are a brutally honest productivity assistant. "
-                "Pick the single best task to work on right now based on recency, urgency, and momentum. "
-                "Always respond with valid JSON only."
-            ),
+            "content": "You are a productivity assistant. Pick the best task to work on now. JSON only.",
         },
         {
             "role": "user",
             "content": (
-                f"Current time: {now_str}\n\n"
-                f"Pending todos:\n{todos_block}\n\n"
-                f"Recent work sessions (last 7 days):\n{sessions_block}\n\n"
-                "Pick the ONE todo the user should work on right now. "
-                "Favor: tasks not touched recently, tasks with due dates, tasks with momentum (recently started). "
-                "Give a short punchy reason (max 12 words) — be direct, no fluff. "
-                'Return JSON: {"todo_id": <int>, "reason": "<short reason>"}'
+                f"Now: {now_str}\n\n"
+                f"Todos (id|title|due|subtasks|sessions/hours/last):\n{todos_block}\n\n"
+                "Pick ONE todo. Consider: quick wins (never started, sounds fast), due dates, "
+                "momentum (recently active), neglected (long gap since last session). "
+                "Vary recommendations — not always the biggest project. "
+                "Reason: max 10 words, direct.\n"
+                'JSON: {"todo_id": <int>, "reason": "<reason>"}'
             ),
         },
     ]

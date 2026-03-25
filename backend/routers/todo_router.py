@@ -132,23 +132,25 @@ def suggest_todo():
             if not todos:
                 return {"suggestion": None}
 
-            # Fetch recent sessions (last 7 days)
+            # Fetch session stats per todo
+            todo_ids = [t["id"] for t in todos]
             cur.execute(
                 """
-                SELECT COALESCE(t.title, s.title) AS title, s.started_at, s.seconds_spent
-                FROM sessions s
-                LEFT JOIN todos t ON t.id = s.todo_id
-                WHERE s.started_at >= NOW() - INTERVAL '7 days'
-                  AND s.ended_at IS NOT NULL
-                ORDER BY s.started_at DESC
-                LIMIT 20;
-                """
+                SELECT todo_id,
+                       COUNT(*) AS session_count,
+                       COALESCE(SUM(seconds_spent), 0) AS total_seconds,
+                       MAX(started_at) AS last_session
+                FROM sessions
+                WHERE todo_id = ANY(%s) AND ended_at IS NOT NULL
+                GROUP BY todo_id;
+                """,
+                (todo_ids,)
             )
-            recent_sessions = cur.fetchall()
+            stats = {r["todo_id"]: r for r in cur.fetchall()}
 
-    now_str = datetime.now(timezone.utc).strftime("%A %Y-%m-%d %H:%M UTC")
+    now_str = datetime.now(timezone.utc).strftime("%a %Y-%m-%d %H:%M UTC")
     try:
-        result = chat_json(suggest_task_messages(todos, recent_sessions, now_str))
+        result = chat_json(suggest_task_messages(todos, stats, now_str))
         todo_id = result.get("todo_id")
         reason = result.get("reason", "")
         # Find the matching todo title
