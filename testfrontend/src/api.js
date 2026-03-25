@@ -127,6 +127,12 @@ export const api = {
       body: JSON.stringify({ habit_id: habitId, log_date: logDate }),
     }),
 
+  getSessionStats: () =>
+    request('/api/v1/sessions/stats'),
+
+  getWeeklySummary: () =>
+    request('/api/v1/sessions/weekly-summary'),
+
   // Sessions (calendar/strip) — pass local→UTC bounds so timezone is correct
   getTodaySessions: (localDateStr) => {
     const s = new Date(localDateStr + 'T00:00:00');
