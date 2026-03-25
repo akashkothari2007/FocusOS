@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException
 from typing import Optional, Literal
 from db import get_conn
@@ -11,6 +11,9 @@ from prompts import suggest_task_messages
 log = logging.getLogger("todo_router")
 
 router = APIRouter(prefix="/api/v1")
+
+# In-memory dismiss store: {todo_id: dismissed_at datetime}
+_dismissed: dict[int, datetime] = {}
 
 
 # get all todos either all or by status filtered
@@ -122,6 +125,13 @@ def suggest_todo():
             if not todos:
                 return {"suggestion": None}
 
+            # Filter out todos dismissed within the last hour
+            one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+            todos = [t for t in todos if _dismissed.get(t["id"], datetime.min.replace(tzinfo=timezone.utc)) < one_hour_ago]
+
+            if not todos:
+                return {"suggestion": None}
+
             # Fetch recent sessions (last 7 days)
             cur.execute(
                 """
@@ -149,6 +159,15 @@ def suggest_todo():
     except Exception as e:
         log.error(f"suggest_todo AI call failed: {e}")
         return {"suggestion": None}
+
+
+@router.post("/todos/suggest/dismiss")
+def dismiss_suggestion(body: dict):
+    todo_id = body.get("todo_id")
+    if not todo_id:
+        raise HTTPException(status_code=400, detail="todo_id required")
+    _dismissed[int(todo_id)] = datetime.now(timezone.utc)
+    return {"ok": True}
 
 
 @router.post("/todos/quick-subtask")
