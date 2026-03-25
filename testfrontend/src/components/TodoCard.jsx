@@ -85,6 +85,7 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
   const [title, setTitle] = useState(todo.title || '');
   const [editingDesc, setEditingDesc] = useState(false);
   const [desc, setDesc] = useState(todo.description || '');
+  const [editingDueDate, setEditingDueDate] = useState(false);
   const [newSubtask, setNewSubtask] = useState('');
   const [linksOpen, setLinksOpen] = useState(false);
   const [newLinkUrl, setNewLinkUrl] = useState('');
@@ -119,6 +120,22 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
     } catch {
       setTitle(todo.title || '');
     }
+  }
+
+  function formatDateInput(dt) {
+    if (!dt) return '';
+    return new Date(dt).toISOString().slice(0, 10);
+  }
+
+  async function saveDueDate(value) {
+    setEditingDueDate(false);
+    const newDate = value || null;
+    const currentDate = todo.due_date ? new Date(todo.due_date).toISOString().slice(0, 10) : null;
+    if (newDate === currentDate) return;
+    try {
+      const updated = await api.updateTodo(todo.id, { due_date: newDate });
+      onUpdate(updated);
+    } catch { /* ignore */ }
   }
 
   async function saveDescription() {
@@ -311,6 +328,33 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
               {desc || <span className="placeholder">Add a description…</span>}
             </p>
           )}
+
+          <div className="todo-due-date-row">
+            {editingDueDate ? (
+              <input
+                type="date"
+                className="input input-sm"
+                defaultValue={formatDateInput(todo.due_date)}
+                onBlur={(e) => saveDueDate(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveDueDate(e.target.value);
+                  if (e.key === 'Escape') setEditingDueDate(false);
+                }}
+                autoFocus
+              />
+            ) : (
+              <span
+                className={`todo-due-date-label${!todo.due_date ? ' placeholder' : ''}`}
+                onClick={() => setEditingDueDate(true)}
+                title="Click to set due date"
+              >
+                {todo.due_date ? `Due: ${formatDate(todo.due_date)}` : 'Set due date…'}
+              </span>
+            )}
+            {todo.due_date && !editingDueDate && (
+              <button className="subtask-delete" onClick={() => saveDueDate('')} title="Remove due date">×</button>
+            )}
+          </div>
 
           <div className="subtasks">
             <DndContext
