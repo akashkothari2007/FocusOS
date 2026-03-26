@@ -23,6 +23,13 @@ function formatDate(dt) {
 
 function parseSummary(summary) {
   if (!summary) return [];
+  // Handle PostgreSQL array literal: {"bullet1","bullet2"}
+  if (summary.startsWith('{') && summary.endsWith('}')) {
+    return summary.slice(1, -1)
+      .split('","')
+      .map((s) => s.replace(/^"|"$/g, '').trim())
+      .filter(Boolean);
+  }
   return summary
     .split('\n')
     .map((s) => s.replace(/^[•·\-*]\s*/, '').trim())
