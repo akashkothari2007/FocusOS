@@ -357,6 +357,14 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
           </div>
 
           <div className="subtasks">
+            <form className="add-subtask-form" onSubmit={handleAddSubtask}>
+              <input
+                className="input input-sm"
+                placeholder="Add subtask…"
+                value={newSubtask}
+                onChange={(e) => setNewSubtask(e.target.value)}
+              />
+            </form>
             <DndContext
               sensors={subtaskSensors}
               collisionDetection={closestCenter}
@@ -377,14 +385,6 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
                 ))}
               </SortableContext>
             </DndContext>
-            <form className="add-subtask-form" onSubmit={handleAddSubtask}>
-              <input
-                className="input input-sm"
-                placeholder="Add subtask…"
-                value={newSubtask}
-                onChange={(e) => setNewSubtask(e.target.value)}
-              />
-            </form>
           </div>
 
           <div className="todo-card-footer">
