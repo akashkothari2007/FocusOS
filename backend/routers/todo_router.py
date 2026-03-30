@@ -1,19 +1,13 @@
 import json
 import logging
-from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException
 from typing import Optional, Literal
 from db import get_conn
 from models.todo_models import CreateTodo, UpdateTodo, Link, ReorderTodos, QuickTodo
-from ai import chat_json
-from prompts import suggest_task_messages
 
 log = logging.getLogger("todo_router")
 
 router = APIRouter(prefix="/api/v1")
-
-# In-memory dismiss store: {todo_id: dismissed_at datetime}
-_dismissed: dict[int, datetime] = {}
 
 
 # get all todos either all or by status filtered
@@ -106,70 +100,6 @@ def delete_todo(todo_id: int):
             if not row:
                 raise HTTPException(status_code=404, detail="Todo not found")
     return  # 204 = no content
-
-@router.get("/todos/suggest")
-def suggest_todo():
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            # Return null if a session is already active
-            cur.execute("SELECT id FROM sessions WHERE ended_at IS NULL LIMIT 1;")
-            if cur.fetchone():
-                return {"suggestion": None}
-
-            # Fetch pending todos
-            cur.execute(
-                "SELECT id, title, due_date, subtasks FROM todos WHERE status = 'pending' ORDER BY (due_date IS NULL) ASC, due_date ASC, sort_order ASC;"
-            )
-            todos = cur.fetchall()
-
-            if not todos:
-                return {"suggestion": None}
-
-            # Filter out todos dismissed within the last hour
-            one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
-            todos = [t for t in todos if _dismissed.get(t["id"], datetime.min.replace(tzinfo=timezone.utc)) < one_hour_ago]
-
-            if not todos:
-                return {"suggestion": None}
-
-            # Fetch session stats per todo
-            todo_ids = [t["id"] for t in todos]
-            cur.execute(
-                """
-                SELECT todo_id,
-                       COUNT(*) AS session_count,
-                       COALESCE(SUM(seconds_spent), 0) AS total_seconds,
-                       MAX(started_at) AS last_session
-                FROM sessions
-                WHERE todo_id = ANY(%s) AND ended_at IS NOT NULL
-                GROUP BY todo_id;
-                """,
-                (todo_ids,)
-            )
-            stats = {r["todo_id"]: r for r in cur.fetchall()}
-
-    now_str = datetime.now(timezone.utc).strftime("%a %Y-%m-%d %H:%M UTC")
-    try:
-        result = chat_json(suggest_task_messages(todos, stats, now_str))
-        todo_id = result.get("todo_id")
-        reason = result.get("reason", "")
-        # Find the matching todo title
-        todo_map = {t["id"]: t["title"] for t in todos}
-        if todo_id not in todo_map:
-            return {"suggestion": None}
-        return {"suggestion": {"todo_id": todo_id, "title": todo_map[todo_id], "reason": reason}}
-    except Exception as e:
-        log.error(f"suggest_todo AI call failed: {e}")
-        return {"suggestion": None}
-
-
-@router.post("/todos/suggest/dismiss")
-def dismiss_suggestion(body: dict):
-    todo_id = body.get("todo_id")
-    if not todo_id:
-        raise HTTPException(status_code=400, detail="todo_id required")
-    _dismissed[int(todo_id)] = datetime.now(timezone.utc)
-    return {"ok": True}
 
 
 @router.post("/todos/quick-subtask")

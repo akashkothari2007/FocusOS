@@ -164,13 +164,6 @@ export const api = {
   deleteRoutine: (id) =>
     request(`/api/v1/routines/${id}`, { method: 'DELETE' }),
 
-  // Suggestion
-  getSuggestion: () =>
-    request('/api/v1/todos/suggest'),
-
-  dismissSuggestion: (todoId) =>
-    request('/api/v1/todos/suggest/dismiss', { method: 'POST', body: JSON.stringify({ todo_id: todoId }) }),
-
   // Email
   getEmailStatus: () =>
     request('/auth/status'),

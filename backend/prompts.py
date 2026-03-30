@@ -288,54 +288,6 @@ def resume_messages(
         },
     ]
 
-def suggest_task_messages(todos: list[dict], stats: dict, now_str: str) -> list[dict]:
-    today = datetime.now(timezone.utc).date()
-
-    def fmt_todo(t):
-        s = stats.get(t["id"])
-        parts = [f"id={t['id']}", t["title"]]
-        if t.get("due_date"):
-            due = t["due_date"]
-            due_date = due.date() if hasattr(due, "date") else due
-            days = (due_date - today).days
-            if days < 0:
-                parts.append(f"OVERDUE {-days}d")
-            elif days == 0:
-                parts.append("due TODAY")
-            else:
-                parts.append(f"due in {days}d")
-        pending_sub = sum(1 for x in (t.get("subtasks") or []) if x.get("status") != "done")
-        if pending_sub:
-            parts.append(f"{pending_sub} subtasks")
-        if s:
-            hrs = round(s["total_seconds"] / 3600, 1)
-            last = str(s["last_session"])[:10]
-            parts.append(f"{s['session_count']}s/{hrs}h/last:{last}")
-        else:
-            parts.append("never started")
-        return " | ".join(parts)
-
-    todos_block = "\n".join(fmt_todo(t) for t in todos)
-
-    return [
-        {
-            "role": "system",
-            "content": "You are a productivity assistant. Pick the best task to work on now. JSON only.",
-        },
-        {
-            "role": "user",
-            "content": (
-                f"Now: {now_str}\n\n"
-                f"Todos (id|title|due|subtasks|sessions/hours/last):\n{todos_block}\n\n"
-                "Pick ONE todo. Priority order: OVERDUE or due TODAY > due within 7 days > quick wins (never started, sounds fast) > momentum (recently active) > neglected.\n"
-                "IMPORTANT: due dates >14 days away are NOT urgent — ignore them as a factor.\n"
-                "Vary picks — not always the same big project.\n"
-                "Reason: max 10 words, direct.\n"
-                'JSON: {"todo_id": <int>, "reason": "<reason>"}'
-            ),
-        },
-    ]
-
 
 def email_classifier_messages(subject: str, sender: str, preview: str) -> list[dict]:
     return [

@@ -26,48 +26,6 @@ import NewsDigest from '../components/NewsDigest';
 const BORDER_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#14b8a6'];
 const todoColor = (id) => BORDER_COLORS[id % BORDER_COLORS.length];
 
-function SuggestionCard({ suggestion, onStart, onDismiss, onDateSet }) {
-  const [showDate, setShowDate] = useState(false);
-  const [dateValue, setDateValue] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  async function handleSetDate() {
-    if (!dateValue) return;
-    setSaving(true);
-    try {
-      await api.updateTodo(suggestion.todo_id, { due_date: dateValue });
-      onDateSet();
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="suggestion-card">
-      <span className="suggestion-label">✦ suggested</span>
-      <div className="suggestion-title">{suggestion.title}</div>
-      <div className="suggestion-reason">{suggestion.reason}</div>
-      <div className="suggestion-actions">
-        <button className="btn btn-primary btn-sm" onClick={onStart}>Start session</button>
-        <button className="btn btn-sm" onClick={() => setShowDate(v => !v)}>Add due date</button>
-        <button className="btn btn-sm suggestion-dismiss" onClick={onDismiss}>Dismiss</button>
-      </div>
-      {showDate && (
-        <div className="suggestion-date-row">
-          <input
-            type="date"
-            className="input input-sm"
-            value={dateValue}
-            onChange={e => setDateValue(e.target.value)}
-          />
-          <button className="btn btn-sm btn-primary" onClick={handleSetDate} disabled={saving || !dateValue}>
-            {saving ? '...' : 'Set'}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function SortableTodoItem({ todo, borderColor, ...cardProps }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -107,15 +65,6 @@ export default function Todos({ activeSession, setActiveSession }) {
     queryFn: () => api.getTodos('pending').then((d) => d.todos),
   });
   const todos = data ?? [];
-
-  const { data: suggestionData, refetch: refetchSuggestion } = useQuery({
-    queryKey: ['suggestion'],
-    queryFn: () => api.getSuggestion(),
-    enabled: !activeSession && view === 'todos',
-    staleTime: Infinity,
-    retry: false,
-  });
-  const suggestion = suggestionData?.suggestion ?? null;
 
   const pinned = todos.filter((t) => t.due_date);
   const undated = todos.filter((t) => !t.due_date);
@@ -164,20 +113,6 @@ export default function Todos({ activeSession, setActiveSession }) {
     }
   }
 
-  function hideSuggestion() {
-    queryClient.setQueryData(['suggestion'], { suggestion: null });
-  }
-
-  async function handleDismissSuggestion() {
-    await api.dismissSuggestion(suggestion.todo_id);
-    hideSuggestion();
-  }
-
-  async function handleStartSuggestion() {
-    hideSuggestion();
-    await handleStartSession({ id: suggestion.todo_id, title: suggestion.title });
-  }
-
   function handleDragStart({ active }) {
     setActiveId(active.id);
   }
@@ -219,14 +154,6 @@ export default function Todos({ activeSession, setActiveSession }) {
         </div>
 
         {view === 'routines' ? <Routines /> : <>
-        {suggestion && (
-          <SuggestionCard
-            suggestion={suggestion}
-            onStart={handleStartSuggestion}
-            onDismiss={handleDismissSuggestion}
-            onDateSet={hideSuggestion}
-          />
-        )}
         <AddTodoForm />
         <div className="todo-list">
           {/* Pinned (dated) todos — not draggable */}

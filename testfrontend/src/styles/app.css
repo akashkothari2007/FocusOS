@@ -2189,58 +2189,6 @@ body {
   text-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 
-/* ─── Suggestion Card ─────────────────────────────────────── */
-.suggestion-card {
-  background: rgba(99, 102, 241, 0.05);
-  border: 1px solid rgba(99, 102, 241, 0.18);
-  border-left: 3px solid #6366f1;
-  border-radius: 10px;
-  padding: 13px 15px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 6px;
-}
-
-.suggestion-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #6366f1;
-}
-
-.suggestion-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1a1a2e;
-  line-height: 1.3;
-}
-
-.suggestion-reason {
-  font-size: 13px;
-  color: #475569;
-}
-
-.suggestion-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-  align-items: center;
-}
-
-.suggestion-dismiss {
-  margin-left: auto;
-  color: #94a3b8;
-}
-
-.suggestion-date-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-top: 2px;
-}
 
 /* ─── News Digest ─────────────────────────────────────────── */
 .news-digest {
