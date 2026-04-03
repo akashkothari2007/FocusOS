@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
 import Todos from './pages/Todos';
 import Metrics from './pages/Metrics';
@@ -67,8 +68,27 @@ function ApiKeyGate({ onUnlock }) {
 
 export default function App() {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('focusos_api_key'));
-  // activeSession: { sessionId, todoId, todoTitle, startedAt }
   const [activeSession, setActiveSession] = useState(null);
+  const queryClient = useQueryClient();
+
+  // Prefetch common data on load so tabs feel instant
+  useEffect(() => {
+    if (!apiKey) return;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    queryClient.prefetchQuery({
+      queryKey: ['todos', 'pending'],
+      queryFn: () => api.getTodos('pending').then((d) => d.todos),
+    });
+    queryClient.prefetchQuery({
+      queryKey: ['routines'],
+      queryFn: () => api.getRoutines().then((d) => d.routines),
+    });
+    queryClient.prefetchQuery({
+      queryKey: ['daily-plan', todayStr],
+      queryFn: () => api.getDailyPlan(todayStr).then((d) => d.content),
+      staleTime: Infinity,
+    });
+  }, [apiKey]);
 
   // Restore any in-progress session on load
   useEffect(() => {
