@@ -1,7 +1,7 @@
 import json
 from fastapi import APIRouter, HTTPException
 from db import get_conn
-from models.routine_models import CreateRoutine, UpdateRoutine
+from models.routine_models import CreateRoutine, UpdateRoutine, ReorderRoutines
 
 router = APIRouter(prefix="/api/v1")
 
@@ -10,7 +10,7 @@ router = APIRouter(prefix="/api/v1")
 def get_routines():
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT * FROM routines ORDER BY created_at ASC;")
+            cur.execute("SELECT * FROM routines ORDER BY sort_order ASC, id ASC;")
             rows = cur.fetchall()
     return {"routines": rows}
 
@@ -51,6 +51,24 @@ def update_routine(routine_id: int, updates: UpdateRoutine):
             if not row:
                 raise HTTPException(status_code=404, detail="Routine not found")
     return row
+
+
+@router.post("/routines/reorder")
+def reorder_routines(body: ReorderRoutines):
+    ids = body.ids
+    orders = [i * 10 for i in range(len(ids))]
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE routines SET sort_order = v.ord
+                FROM (SELECT unnest(%s::int[]) AS id, unnest(%s::int[]) AS ord) AS v
+                WHERE routines.id = v.id;
+                """,
+                (ids, orders)
+            )
+        conn.commit()
+    return {"ok": True}
 
 
 @router.delete("/routines/{routine_id}", status_code=204)

@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from db import get_conn
-from routers import todo_router, session_router, job_router, doc_router, profile_router, habit_router, email_router, routine_router
+from routers import todo_router, session_router, job_router, doc_router, profile_router, habit_router, email_router, routine_router, plan_router
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from scheduler import run_email_scan
 
@@ -39,6 +39,13 @@ async def start_scheduler():
                     email_id TEXT PRIMARY KEY,
                     scanned_at TIMESTAMPTZ DEFAULT NOW()
                 )
+            """)
+            cur.execute("ALTER TABLE routines ADD COLUMN IF NOT EXISTS sort_order int DEFAULT 0;")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS daily_plan (
+                    plan_date date PRIMARY KEY,
+                    content text NOT NULL DEFAULT ''
+                );
             """)
         conn.commit()
 
@@ -89,5 +96,6 @@ app.include_router(profile_router.router)
 app.include_router(habit_router.router)
 app.include_router(email_router.router)
 app.include_router(routine_router.router)
+app.include_router(plan_router.router)
 
  
