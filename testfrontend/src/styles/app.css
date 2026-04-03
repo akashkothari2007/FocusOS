@@ -2441,3 +2441,39 @@ body {
 @media (max-width: 600px) {
   .routine-delete-btn { opacity: 1; }
 }
+
+/* ─── Daily Plan ──────────────────────────────────────────── */
+.daily-plan-area {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 4px 0;
+}
+
+.daily-plan-textarea {
+  width: 100%;
+  flex: 1;
+  min-height: 480px;
+  padding: 16px;
+  background: #fff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #1a1a2e;
+  resize: vertical;
+  box-shadow: 0 1px 4px rgba(99, 102, 241, 0.06);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+}
+
+.daily-plan-textarea:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.daily-plan-textarea::placeholder {
+  color: #cbd5e1;
+}

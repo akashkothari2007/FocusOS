@@ -1,11 +1,26 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { api } from '../api';
 
 const BORDER_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#14b8a6'];
 const routineColor = (id) => BORDER_COLORS[id % BORDER_COLORS.length];
 
-function RoutineCard({ routine, borderColor }) {
+function RoutineCard({ routine, borderColor, dragHandleProps }) {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -55,7 +70,11 @@ function RoutineCard({ routine, borderColor }) {
 
   return (
     <div className="todo-card" style={{ borderLeftColor: borderColor }}>
-      <div className="todo-card-header routine-card-header" onClick={() => !editingName && setExpanded((e) => !e)}>
+      <div
+        className={`todo-card-header routine-card-header${dragHandleProps ? ' todo-card-header--draggable' : ''}`}
+        onClick={() => !editingName && setExpanded((e) => !e)}
+        {...(dragHandleProps || {})}
+      >
         <div className="todo-card-title-row">
           <span className="routine-chevron">{expanded ? '▾' : '▸'}</span>
           {editingName ? (
@@ -115,15 +134,45 @@ function RoutineCard({ routine, borderColor }) {
   );
 }
 
+function SortableRoutineItem({ routine, borderColor }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: routine.id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="todo-sortable-item"
+      style={{
+        transform: transform ? CSS.Transform.toString(transform) : undefined,
+        transition,
+        opacity: isDragging ? 0 : 1,
+      }}
+    >
+      <RoutineCard
+        routine={routine}
+        borderColor={borderColor}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
+    </div>
+  );
+}
+
 export default function Routines() {
   const queryClient = useQueryClient();
   const [newName, setNewName] = useState('');
+  const [activeId, setActiveId] = useState(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
 
   const { data } = useQuery({
     queryKey: ['routines'],
     queryFn: () => api.getRoutines().then((d) => d.routines),
   });
   const routines = data ?? [];
+
+  const activeRoutine = activeId ? routines.find((r) => r.id === activeId) : null;
 
   async function handleCreate(e) {
     e.preventDefault();
@@ -132,6 +181,32 @@ export default function Routines() {
     setNewName('');
     const created = await api.createRoutine(name);
     queryClient.setQueryData(['routines'], (old = []) => [...old, created]);
+  }
+
+  function handleDragStart({ active }) {
+    setActiveId(active.id);
+  }
+
+  async function handleDragEnd({ active, over }) {
+    setActiveId(null);
+    if (!over || active.id === over.id) return;
+
+    const oldIdx = routines.findIndex((r) => r.id === active.id);
+    const newIdx = routines.findIndex((r) => r.id === over.id);
+    const reordered = arrayMove(routines, oldIdx, newIdx);
+
+    await queryClient.cancelQueries({ queryKey: ['routines'] });
+    queryClient.setQueryData(['routines'], reordered);
+
+    try {
+      await api.reorderRoutines(reordered.map((r) => r.id));
+    } catch {
+      queryClient.invalidateQueries({ queryKey: ['routines'] });
+    }
+  }
+
+  function handleDragCancel() {
+    setActiveId(null);
   }
 
   return (
@@ -146,9 +221,36 @@ export default function Routines() {
         <button type="submit" className="btn btn-primary" disabled={!newName.trim()}>Add</button>
       </form>
       <div className="todo-list">
-        {routines.map((routine) => (
-          <RoutineCard key={routine.id} routine={routine} borderColor={routineColor(routine.id)} />
-        ))}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          <SortableContext
+            items={routines.map((r) => r.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {routines.map((routine) => (
+              <SortableRoutineItem
+                key={routine.id}
+                routine={routine}
+                borderColor={routineColor(routine.id)}
+              />
+            ))}
+          </SortableContext>
+          <DragOverlay dropAnimation={null}>
+            {activeRoutine && (
+              <div className="todo-drag-overlay">
+                <RoutineCard
+                  routine={activeRoutine}
+                  borderColor={routineColor(activeRoutine.id)}
+                />
+              </div>
+            )}
+          </DragOverlay>
+        </DndContext>
         {routines.length === 0 && (
           <p className="empty-state">No routines yet. Add one above.</p>
         )}

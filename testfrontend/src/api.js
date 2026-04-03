@@ -164,6 +164,16 @@ export const api = {
   deleteRoutine: (id) =>
     request(`/api/v1/routines/${id}`, { method: 'DELETE' }),
 
+  reorderRoutines: (ids) =>
+    request('/api/v1/routines/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
+
+  // Daily Plan
+  getDailyPlan: (date) =>
+    request(`/api/v1/daily-plan?date=${date}`),
+
+  updateDailyPlan: (date, content) =>
+    request('/api/v1/daily-plan', { method: 'PUT', body: JSON.stringify({ date, content }) }),
+
   // Email
   getEmailStatus: () =>
     request('/auth/status'),

@@ -22,6 +22,7 @@ import TodoCard from '../components/TodoCard';
 import HabitTracker from '../components/HabitTracker';
 import TodayStrip from '../components/TodayStrip';
 import NewsDigest from '../components/NewsDigest';
+import DailyPlan from '../components/DailyPlan';
 
 const BORDER_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#14b8a6'];
 const todoColor = (id) => BORDER_COLORS[id % BORDER_COLORS.length];
@@ -36,7 +37,7 @@ function SortableTodoItem({ todo, borderColor, ...cardProps }) {
       ref={setNodeRef}
       className="todo-sortable-item"
       style={{
-        transform: CSS.Transform.toString(transform),
+        transform: transform ? CSS.Transform.toString(transform) : undefined,
         transition,
         opacity: isDragging ? 0 : 1,
       }}
@@ -151,9 +152,10 @@ export default function Todos({ activeSession, setActiveSession }) {
         <div className="view-toggle">
           <button className={`view-toggle-btn${view === 'todos' ? ' active' : ''}`} onClick={() => setView('todos')}>Todos</button>
           <button className={`view-toggle-btn${view === 'routines' ? ' active' : ''}`} onClick={() => setView('routines')}>Routines</button>
+          <button className={`view-toggle-btn${view === 'plan' ? ' active' : ''}`} onClick={() => setView('plan')}>Plan</button>
         </div>
 
-        {view === 'routines' ? <Routines /> : <>
+        {view === 'routines' ? <Routines /> : view === 'plan' ? <DailyPlan /> : <>
         <AddTodoForm />
         <div className="todo-list">
           {/* Pinned (dated) todos — not draggable */}

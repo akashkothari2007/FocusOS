@@ -57,7 +57,7 @@ function SortableSubtaskRow({ subtask, index, onToggle, onDelete }) {
       ref={setNodeRef}
       className={`subtask-row${isDragging ? ' subtask-dragging' : ''}`}
       style={{
-        transform: CSS.Transform.toString(transform),
+        transform: transform ? CSS.Transform.toString(transform) : undefined,
         transition,
         opacity: isDragging ? 0.5 : 1,
         zIndex: isDragging ? 10 : 'auto',
