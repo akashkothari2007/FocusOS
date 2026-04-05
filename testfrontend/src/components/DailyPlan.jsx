@@ -2,9 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 
-const today = new Date().toISOString().slice(0, 10);
+function localDate() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 export default function DailyPlan() {
+  const today = localDate();
   const queryClient = useQueryClient();
   const debounceRef = useRef(null);
   const initialized = useRef(false);

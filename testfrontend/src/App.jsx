@@ -74,7 +74,8 @@ export default function App() {
   // Prefetch common data on load so tabs feel instant
   useEffect(() => {
     if (!apiKey) return;
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const d = new Date();
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     queryClient.prefetchQuery({
       queryKey: ['todos', 'pending'],
       queryFn: () => api.getTodos('pending').then((d) => d.todos),
