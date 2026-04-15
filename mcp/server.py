@@ -83,6 +83,25 @@ async def list_tools():
                 "required": ["todo_id"],
             },
         ),
+        types.Tool(
+            name="update_todo",
+            description="Update a todo by fuzzy name match. Can change title, description, due_date, and add new subtasks.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Todo name (fuzzy match)"},
+                    "title": {"type": "string", "description": "New title"},
+                    "description": {"type": "string", "description": "New description"},
+                    "due_date": {"type": "string", "description": "Due date ISO string (e.g. 2026-04-15T00:00:00Z), or null to clear"},
+                    "new_subtasks": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Subtask titles to ADD (appended to existing subtasks)",
+                    },
+                },
+                "required": ["project"],
+            },
+        ),
         # ── Subtasks ───────────────────────────────────────────────────────
         types.Tool(
             name="add_subtask",
@@ -218,6 +237,40 @@ async def call_tool(name: str, arguments: dict):
         elif name == "complete_todo":
             await api("PATCH", f"/api/v1/todos/{arguments['todo_id']}", json={"status": "done"})
             result = f"Marked todo #{arguments['todo_id']} as done"
+
+        elif name == "update_todo":
+            data = await api("GET", "/api/v1/todos", params={"status": "pending"})
+            todo = fuzzy_find_todo(data.get("todos", []), arguments["project"])
+            if not todo:
+                result = f"No todo matching '{arguments['project']}'"
+            else:
+                patch = {}
+                if "title" in arguments:
+                    patch["title"] = arguments["title"]
+                if "description" in arguments:
+                    patch["description"] = arguments["description"]
+                if "due_date" in arguments:
+                    patch["due_date"] = arguments["due_date"]
+                # Append new subtasks to existing ones
+                new_subtask_titles = arguments.get("new_subtasks", [])
+                if new_subtask_titles:
+                    existing = todo.get("subtasks") or []
+                    max_id = max((s.get("id", 0) for s in existing), default=0)
+                    max_order = max((s.get("order", 0) for s in existing), default=-1)
+                    for i, t in enumerate(new_subtask_titles):
+                        existing.append({
+                            "id": max_id + i + 1,
+                            "title": t,
+                            "status": "pending",
+                            "order": max_order + i + 1,
+                        })
+                    patch["subtasks"] = existing
+                if not patch:
+                    result = f"Nothing to update on '{todo['title']}'"
+                else:
+                    await api("PATCH", f"/api/v1/todos/{todo['id']}", json=patch)
+                    changes = list(patch.keys())
+                    result = f"Updated todo '{todo['title']}': {', '.join(changes)}"
 
         # ── Subtasks ───────────────────────────────────────────────────────
         elif name == "add_subtask":

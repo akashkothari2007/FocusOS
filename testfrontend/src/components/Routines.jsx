@@ -20,7 +20,8 @@ import { api } from '../api';
 const BORDER_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#14b8a6'];
 const routineColor = (id) => BORDER_COLORS[id % BORDER_COLORS.length];
 
-function RoutineCard({ routine, borderColor, dragHandleProps }) {
+function RoutineCard({ routine, borderColor, dragHandleProps, activeSession, onStartSession }) {
+  const isActive = activeSession?.todoTitle === routine.name && !activeSession?.todoId;
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -103,6 +104,13 @@ function RoutineCard({ routine, borderColor, dragHandleProps }) {
             <span className="due-date">{routine.items.length}</span>
           )}
         </div>
+        <button
+          className={`routine-play-btn${isActive ? ' routine-play-btn--active' : ''}`}
+          onClick={(e) => { e.stopPropagation(); onStartSession(routine); }}
+          title={isActive ? 'Session active' : 'Start session'}
+        >
+          {isActive ? '■' : '▶'}
+        </button>
         <button className="routine-delete-btn" onClick={handleDelete} title="Delete routine">✕</button>
       </div>
 
@@ -134,7 +142,7 @@ function RoutineCard({ routine, borderColor, dragHandleProps }) {
   );
 }
 
-function SortableRoutineItem({ routine, borderColor }) {
+function SortableRoutineItem({ routine, borderColor, activeSession, onStartSession }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: routine.id });
 
@@ -152,12 +160,14 @@ function SortableRoutineItem({ routine, borderColor }) {
         routine={routine}
         borderColor={borderColor}
         dragHandleProps={{ ...attributes, ...listeners }}
+        activeSession={activeSession}
+        onStartSession={onStartSession}
       />
     </div>
   );
 }
 
-export default function Routines() {
+export default function Routines({ activeSession, setActiveSession }) {
   const queryClient = useQueryClient();
   const [newName, setNewName] = useState('');
   const [activeId, setActiveId] = useState(null);
@@ -209,6 +219,36 @@ export default function Routines() {
     setActiveId(null);
   }
 
+  async function handleStartSession(routine) {
+    // If this routine's session is already active, end it
+    if (activeSession && activeSession.todoTitle === routine.name && !activeSession.todoId) {
+      await api.endSession(activeSession.sessionId, null);
+      setActiveSession(null);
+      return;
+    }
+
+    // If another session is active, confirm swap
+    if (activeSession) {
+      const ok = window.confirm(
+        `Stop "${activeSession.todoTitle}" and start "${routine.name}"?`
+      );
+      if (!ok) return;
+      await api.endSession(activeSession.sessionId, null);
+    }
+
+    try {
+      const session = await api.startFreeformSession(routine.name);
+      setActiveSession({
+        sessionId: session.id,
+        todoId: null,
+        todoTitle: routine.name,
+        startedAt: session.started_at,
+      });
+    } catch {
+      setActiveSession(null);
+    }
+  }
+
   return (
     <div>
       <form onSubmit={handleCreate} className="add-routine-form">
@@ -237,6 +277,8 @@ export default function Routines() {
                 key={routine.id}
                 routine={routine}
                 borderColor={routineColor(routine.id)}
+                activeSession={activeSession}
+                onStartSession={handleStartSession}
               />
             ))}
           </SortableContext>
@@ -246,6 +288,8 @@ export default function Routines() {
                 <RoutineCard
                   routine={activeRoutine}
                   borderColor={routineColor(activeRoutine.id)}
+                  activeSession={activeSession}
+                  onStartSession={handleStartSession}
                 />
               </div>
             )}

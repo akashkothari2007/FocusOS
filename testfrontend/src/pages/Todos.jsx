@@ -155,7 +155,7 @@ export default function Todos({ activeSession, setActiveSession }) {
           <button className={`view-toggle-btn${view === 'plan' ? ' active' : ''}`} onClick={() => setView('plan')}>Plan</button>
         </div>
 
-        {view === 'routines' ? <Routines /> : view === 'plan' ? <DailyPlan /> : <>
+        {view === 'routines' ? <Routines activeSession={activeSession} setActiveSession={setActiveSession} /> : view === 'plan' ? <DailyPlan /> : <>
         <AddTodoForm />
         <div className="todo-list">
           {/* Pinned (dated) todos — not draggable */}
