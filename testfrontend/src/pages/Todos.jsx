@@ -61,7 +61,7 @@ export default function Todos({ activeSession, setActiveSession }) {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['todos', 'pending'],
     queryFn: () => api.getTodos('pending').then((d) => d.todos),
   });
@@ -214,7 +214,7 @@ export default function Todos({ activeSession, setActiveSession }) {
             </DragOverlay>
           </DndContext>
 
-          {todos.length === 0 && (
+          {!isLoading && todos.length === 0 && (
             <p className="empty-state">No pending todos. Add one above.</p>
           )}
         </div>
