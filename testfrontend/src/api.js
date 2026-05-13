@@ -29,6 +29,12 @@ export const api = {
   reorderTodos: (ids) =>
     request('/api/v1/todos/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
 
+  markOnHold: (id) =>
+    request(`/api/v1/todos/${id}/hold`, { method: 'PATCH' }),
+
+  unhold: (id) =>
+    request(`/api/v1/todos/${id}/unhold`, { method: 'PATCH' }),
+
   getSessions: (todoId) =>
     request(`/api/v1/todos/${todoId}/sessions`),
 

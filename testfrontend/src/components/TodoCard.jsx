@@ -79,7 +79,7 @@ function SortableSubtaskRow({ subtask, index, onToggle, onDelete }) {
   );
 }
 
-export default function TodoCard({ todo, borderColor, isActiveSession, onStartSession, onMarkDone, onUpdate, dragHandleProps }) {
+export default function TodoCard({ todo, borderColor, isActiveSession, onStartSession, onMarkDone, onMarkOnHold, onUnhold, onUpdate, dragHandleProps }) {
   const [expanded, setExpanded] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [title, setTitle] = useState(todo.title || '');
@@ -215,13 +215,18 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
     api.updateTodo(todo.id, { status: 'done' });
   }
 
+  async function handleMarkOnHold() {
+    if (onMarkOnHold) onMarkOnHold(todo.id);
+    try { await api.markOnHold(todo.id); } catch { /* ignore */ }
+  }
+
   function handlePlayClick(e) {
     e.stopPropagation();
     onStartSession(todo);
   }
 
   return (
-    <div className="todo-card" style={{ borderLeftColor: borderColor, position: 'relative', zIndex: linksOpen ? 100 : 'auto' }}>
+    <div className={`todo-card${todo.status === 'on_hold' ? ' on-hold' : ''}`} style={{ borderLeftColor: borderColor, position: 'relative', zIndex: linksOpen ? 100 : 'auto' }}>
       <div
         className={`todo-card-header${dragHandleProps ? ' todo-card-header--draggable' : ''}`}
         onClick={() => setExpanded((v) => !v)}
@@ -388,7 +393,12 @@ export default function TodoCard({ todo, borderColor, isActiveSession, onStartSe
           </div>
 
           <div className="todo-card-footer">
-            <button className="btn btn-done" onClick={handleMarkDone}>Mark done</button>
+            {todo.status === 'on_hold' ? (
+              <button className="btn btn-resume" onClick={() => onUnhold && onUnhold(todo.id)}>Resume</button>
+            ) : (
+              <button className="btn btn-hold" onClick={handleMarkOnHold}>On hold</button>
+            )}
+            <button className="btn btn-done" onClick={handleMarkDone}>Done</button>
           </div>
         </div>
       )}

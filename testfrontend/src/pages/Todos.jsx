@@ -67,8 +67,9 @@ export default function Todos({ activeSession, setActiveSession }) {
   });
   const todos = data ?? [];
 
-  const pinned = todos.filter((t) => t.due_date);
-  const undated = todos.filter((t) => !t.due_date);
+  const pinned = todos.filter((t) => t.due_date && t.status !== 'on_hold');
+  const undated = todos.filter((t) => !t.due_date && t.status !== 'on_hold');
+  const onHold = todos.filter((t) => t.status === 'on_hold');
 
   const activeTodo = activeId ? undated.find((t) => t.id === activeId) : null;
   const activeIdx = activeId ? undated.findIndex((t) => t.id === activeId) : -1;
@@ -77,6 +78,30 @@ export default function Todos({ activeSession, setActiveSession }) {
     queryClient.setQueryData(['todos', 'pending'], (old = []) =>
       old.filter((t) => t.id !== todoId)
     );
+  }
+
+  async function handleMarkOnHold(todoId) {
+    const prev = queryClient.getQueryData(['todos', 'pending']);
+    queryClient.setQueryData(['todos', 'pending'], (old = []) =>
+      old.map((t) => t.id === todoId ? { ...t, status: 'on_hold' } : t)
+    );
+    try {
+      await api.markOnHold(todoId);
+    } catch {
+      queryClient.setQueryData(['todos', 'pending'], prev);
+    }
+  }
+
+  async function handleUnhold(todoId) {
+    const prev = queryClient.getQueryData(['todos', 'pending']);
+    queryClient.setQueryData(['todos', 'pending'], (old = []) =>
+      old.map((t) => t.id === todoId ? { ...t, status: 'pending' } : t)
+    );
+    try {
+      await api.unhold(todoId);
+    } catch {
+      queryClient.setQueryData(['todos', 'pending'], prev);
+    }
   }
 
   function handleUpdate(updatedTodo) {
@@ -167,6 +192,8 @@ export default function Todos({ activeSession, setActiveSession }) {
               isActiveSession={activeSession?.todoId === todo.id}
               onStartSession={handleStartSession}
               onMarkDone={handleMarkDone}
+              onMarkOnHold={handleMarkOnHold}
+              onUnhold={handleUnhold}
               onUpdate={handleUpdate}
             />
           ))}
@@ -192,6 +219,8 @@ export default function Todos({ activeSession, setActiveSession }) {
                     isActiveSession={activeSession?.todoId === todo.id}
                     onStartSession={handleStartSession}
                     onMarkDone={handleMarkDone}
+                    onMarkOnHold={handleMarkOnHold}
+                    onUnhold={handleUnhold}
                     onUpdate={handleUpdate}
                   />
                 ))}
@@ -207,12 +236,33 @@ export default function Todos({ activeSession, setActiveSession }) {
                     isActiveSession={activeSession?.todoId === activeTodo.id}
                     onStartSession={handleStartSession}
                     onMarkDone={handleMarkDone}
+                    onMarkOnHold={handleMarkOnHold}
+                    onUnhold={handleUnhold}
                     onUpdate={handleUpdate}
                   />
                 </div>
               )}
             </DragOverlay>
           </DndContext>
+
+          {onHold.length > 0 && (
+            <div className="on-hold-section">
+              <span className="on-hold-label">On Hold</span>
+              {onHold.map((todo) => (
+                <TodoCard
+                  key={todo.id}
+                  todo={todo}
+                  borderColor={todoColor(todo.id)}
+                  isActiveSession={activeSession?.todoId === todo.id}
+                  onStartSession={handleStartSession}
+                  onMarkDone={handleMarkDone}
+                  onMarkOnHold={handleMarkOnHold}
+                  onUnhold={handleUnhold}
+                  onUpdate={handleUpdate}
+                />
+              ))}
+            </div>
+          )}
 
           {!isLoading && todos.length === 0 && (
             <p className="empty-state">No pending todos. Add one above.</p>

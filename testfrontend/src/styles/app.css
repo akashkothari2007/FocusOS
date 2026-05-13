@@ -147,6 +147,26 @@ body {
 }
 .btn-done:hover:not(:disabled) { background: rgba(22, 163, 74, 0.18); }
 
+.btn-hold {
+  background: none;
+  color: #94a3b8;
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+.btn-hold:hover:not(:disabled) { background: rgba(245, 158, 11, 0.08); color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); }
+
+.btn-resume {
+  background: rgba(99, 102, 241, 0.08);
+  color: #6366f1;
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+}
+.btn-resume:hover:not(:disabled) { background: rgba(99, 102, 241, 0.15); }
+
 .btn-end {
   background: rgba(225, 29, 72, 0.1);
   color: #e11d48;
@@ -216,6 +236,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .todos-sidebar {
@@ -277,11 +299,18 @@ body {
   border-left-width: 4px;
   box-shadow: 0 2px 12px rgba(99, 102, 241, 0.06), 0 1px 4px rgba(0,0,0,0.03);
   transition: box-shadow 0.2s, transform 0.15s;
+  overflow: hidden;
 }
 .todo-card:hover {
   box-shadow: 0 6px 24px rgba(99, 102, 241, 0.11), 0 2px 8px rgba(0,0,0,0.05);
   transform: translateY(-1px);
 }
+.todo-card.on-hold {
+  background: rgba(245, 158, 11, 0.04);
+  border-color: rgba(245, 158, 11, 0.18);
+  opacity: 0.7;
+}
+.todo-card.on-hold:hover { opacity: 1; }
 
 .todo-card-header {
   display: flex;
@@ -308,6 +337,7 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .todo-title-input {
@@ -457,6 +487,22 @@ body {
 .todo-card-footer {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+.on-hold-section {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.3);
+}
+.on-hold-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  margin-bottom: 10px;
 }
 
 /* ─── Habit Tracker ───────────────────────────────────────── */

@@ -16,7 +16,7 @@ async def fetch_recent_emails(n: int = 20) -> list:
 
     async with httpx.AsyncClient() as client:
         r = await client.get(
-            "https://graph.microsoft.com/v1.0/me/messages",
+            "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages",
             headers={"Authorization": f"Bearer {access_token}"},
             params={
                 "$top": n,
@@ -48,7 +48,7 @@ async def fetch_todays_and_yesterdays_emails() -> list:
 
     async with httpx.AsyncClient() as client:
         r = await client.get(
-            "https://graph.microsoft.com/v1.0/me/messages",
+            "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages",
             headers={"Authorization": f"Bearer {access_token}"},
             params={
                 "$filter": f"receivedDateTime ge {filter_from} and receivedDateTime lt {filter_to}",

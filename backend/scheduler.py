@@ -40,10 +40,28 @@ async def run_email_scan():
                 cur.execute("DELETE FROM scanned_email_ids WHERE scanned_at < NOW() - INTERVAL '3 days'")
             conn.commit()
 
+        # Fetch connected account email to filter out self-sent
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT email FROM email_accounts LIMIT 1")
+                row = cur.fetchone()
+        account_email = row["email"].lower() if row else None
+
         emails = await fetch_todays_and_yesterdays_emails()
         if not emails:
             log.info("No emails found")
             return
+
+        # Filter out self-sent emails
+        if account_email:
+            before = len(emails)
+            emails = [
+                e for e in emails
+                if e.get("from", {}).get("emailAddress", {}).get("address", "").lower() != account_email
+            ]
+            skipped = before - len(emails)
+            if skipped:
+                log.info(f"Filtered out {skipped} self-sent emails")
 
         # Filter out already-scanned email IDs
         email_ids = [e["id"] for e in emails]

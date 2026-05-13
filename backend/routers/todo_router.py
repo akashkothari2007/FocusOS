@@ -12,10 +12,14 @@ router = APIRouter(prefix="/api/v1")
 
 # get all todos either all or by status filtered
 @router.get("/todos")
-def get_todos(status: Optional[Literal["pending", "done"]] = None):
+def get_todos(status: Optional[Literal["pending", "done", "on_hold"]] = None):
     with get_conn() as conn:
         with conn.cursor() as cur:
-            if status:
+            if status == "pending":
+                cur.execute(
+                    "SELECT * FROM todos WHERE status IN ('pending', 'on_hold') ORDER BY (due_date IS NULL) ASC, due_date ASC, (status = 'on_hold') ASC, sort_order ASC;"
+                )
+            elif status:
                 cur.execute(
                     "SELECT * FROM todos WHERE status = %s ORDER BY (due_date IS NULL) ASC, due_date ASC, sort_order ASC;",
                     (status,)
@@ -29,16 +33,18 @@ def get_todos(status: Optional[Literal["pending", "done"]] = None):
 # create a new todo
 @router.post("/todos", status_code=201)
 def create_todo(todo: CreateTodo):
-    subtasks_json = json.dumps([s.model_dump() for s in todo.subtasks])  # serialize list → JSON string so can be stored in database
+    subtasks_json = json.dumps([s.model_dump() for s in todo.subtasks])
     with get_conn() as conn:
         with conn.cursor() as cur:
+            cur.execute("SELECT COALESCE(MAX(sort_order), 0) + 10 AS next_order FROM todos WHERE status = 'pending' AND due_date IS NULL")
+            next_order = cur.fetchone()["next_order"]
             cur.execute(
                 """
-                INSERT INTO todos (title, description, subtasks, due_date)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO todos (title, description, subtasks, due_date, sort_order)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING *;
                 """,
-                (todo.title, todo.description, subtasks_json, todo.due_date)
+                (todo.title, todo.description, subtasks_json, todo.due_date, next_order)
             )
             row = cur.fetchone()
     return row
@@ -100,6 +106,36 @@ def delete_todo(todo_id: int):
             if not row:
                 raise HTTPException(status_code=404, detail="Todo not found")
     return  # 204 = no content
+
+
+@router.patch("/todos/{todo_id}/hold")
+def hold_todo(todo_id: int):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE todos SET status = 'on_hold' WHERE id = %s RETURNING *;",
+                (todo_id,)
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Todo not found")
+    return row
+
+
+@router.patch("/todos/{todo_id}/unhold")
+def unhold_todo(todo_id: int):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT MAX(sort_order) AS max_order FROM todos WHERE status = 'pending' AND due_date IS NULL")
+            max_order = cur.fetchone()["max_order"] or 0
+            cur.execute(
+                "UPDATE todos SET status = 'pending', sort_order = %s WHERE id = %s RETURNING *;",
+                (max_order + 10, todo_id)
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Todo not found")
+    return row
 
 
 @router.post("/todos/quick-subtask")

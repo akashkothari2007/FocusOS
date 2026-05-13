@@ -26,7 +26,7 @@ class CreateTodo(BaseModel):
 class UpdateTodo(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
-    status: Optional[Literal["pending", "done"]] = None
+    status: Optional[Literal["pending", "done", "on_hold"]] = None
     subtasks: Optional[List[Subtask]] = None
     links: Optional[List[Link]] = None
     due_date: Optional[datetime] = None
