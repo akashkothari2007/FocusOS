@@ -52,21 +52,76 @@ def db_check():
 
 
 
-#-----API Key Middleware-----
+#-----Rate Limiting-----
 import os
+import time
+from collections import defaultdict
+
+# Track failed auth attempts per IP: {ip: [(timestamp, ...), ...]}
+_fail_log: dict[str, list[float]] = defaultdict(list)
+# Blocked IPs: {ip: unblock_timestamp}
+_blocked_ips: dict[str, float] = {}
+
+MAX_FAILURES = 5        # max failed attempts before block
+WINDOW_SECONDS = 60     # rolling window to count failures
+BLOCK_SECONDS = 300     # 5-minute block after too many failures
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+def _cleanup_old_entries(ip: str, now: float):
+    """Remove failure timestamps outside the rolling window."""
+    cutoff = now - WINDOW_SECONDS
+    _fail_log[ip] = [t for t in _fail_log[ip] if t > cutoff]
+    if not _fail_log[ip]:
+        del _fail_log[ip]
+
+#-----API Key Middleware-----
 @app.middleware("http")
 async def api_key_middleware(request: Request, call_next):
 
     EXEMPT_PATHS = ["/auth/login", "/auth/callback", "/health", "/db"]
-    
+
     if request.url.path in EXEMPT_PATHS:
         return await call_next(request)
 
+    ip = _client_ip(request)
+    now = time.time()
+
+    # Check if IP is currently blocked
+    if ip in _blocked_ips:
+        if now < _blocked_ips[ip]:
+            retry_after = int(_blocked_ips[ip] - now)
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many failed attempts. Try again later."},
+                headers={"Retry-After": str(retry_after)},
+            )
+        else:
+            # Block expired — clear it
+            del _blocked_ips[ip]
+            _fail_log.pop(ip, None)
 
     key = request.headers.get("X-API-Key")
     if key != os.environ.get("FOCUSOS_API_KEY"):
+        # Record the failure
+        _fail_log[ip].append(now)
+        _cleanup_old_entries(ip, now)
+
+        if len(_fail_log.get(ip, [])) >= MAX_FAILURES:
+            _blocked_ips[ip] = now + BLOCK_SECONDS
+            logging.warning("Blocked IP %s for %ds after %d failed auth attempts", ip, BLOCK_SECONDS, MAX_FAILURES)
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many failed attempts. Try again later."},
+                headers={"Retry-After": str(BLOCK_SECONDS)},
+            )
+
         return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
-    
+
     return await call_next(request)
 
 #-----Routers-----
