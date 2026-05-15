@@ -299,7 +299,6 @@ body {
   border-left-width: 4px;
   box-shadow: 0 2px 12px rgba(99, 102, 241, 0.06), 0 1px 4px rgba(0,0,0,0.03);
   transition: box-shadow 0.2s, transform 0.15s;
-  overflow: hidden;
 }
 .todo-card:hover {
   box-shadow: 0 6px 24px rgba(99, 102, 241, 0.11), 0 2px 8px rgba(0,0,0,0.05);
