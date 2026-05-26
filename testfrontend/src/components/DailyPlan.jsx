@@ -2,24 +2,17 @@ import { useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 
-function localDate() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 export default function DailyPlan() {
-  const today = localDate();
   const queryClient = useQueryClient();
   const debounceRef = useRef(null);
   const initialized = useRef(false);
 
   const { data: queryData } = useQuery({
-    queryKey: ['daily-plan', today],
-    queryFn: () => api.getDailyPlan(today).then((d) => d.content),
+    queryKey: ['plan'],
+    queryFn: () => api.getPlan().then((d) => d.content),
     staleTime: Infinity,
   });
 
-  // Initialize from cache immediately if prefetched, otherwise wait for load
   const [content, setContent] = useState(() => queryData ?? '');
 
   useEffect(() => {
@@ -34,8 +27,8 @@ export default function DailyPlan() {
     setContent(val);
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      api.updateDailyPlan(today, val);
-      queryClient.setQueryData(['daily-plan', today], val);
+      api.updatePlan(val);
+      queryClient.setQueryData(['plan'], val);
     }, 600);
   }
 
@@ -45,7 +38,7 @@ export default function DailyPlan() {
         className="daily-plan-textarea"
         value={content}
         onChange={handleChange}
-        placeholder="What's the plan for today?"
+        placeholder="What's the plan?"
       />
     </div>
   );

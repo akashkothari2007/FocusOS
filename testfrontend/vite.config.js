@@ -6,8 +6,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': 'https://focusos-production.up.railway.app',
-      '/auth': 'https://focusos-production.up.railway.app',
+      '/api': 'http://localhost:8000',
+      '/auth': 'http://localhost:8000',
     },
   },
 })

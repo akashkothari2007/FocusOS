@@ -74,8 +74,6 @@ export default function App() {
   // Prefetch common data on load so tabs feel instant
   useEffect(() => {
     if (!apiKey) return;
-    const d = new Date();
-    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     queryClient.prefetchQuery({
       queryKey: ['todos', 'pending'],
       queryFn: () => api.getTodos('pending').then((d) => d.todos),
@@ -85,8 +83,8 @@ export default function App() {
       queryFn: () => api.getRoutines().then((d) => d.routines),
     });
     queryClient.prefetchQuery({
-      queryKey: ['daily-plan', todayStr],
-      queryFn: () => api.getDailyPlan(todayStr).then((d) => d.content),
+      queryKey: ['plan'],
+      queryFn: () => api.getPlan().then((d) => d.content),
       staleTime: Infinity,
     });
   }, [apiKey]);

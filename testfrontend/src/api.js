@@ -173,12 +173,12 @@ export const api = {
   reorderRoutines: (ids) =>
     request('/api/v1/routines/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
 
-  // Daily Plan
-  getDailyPlan: (date) =>
-    request(`/api/v1/daily-plan?date=${date}`),
+  // Plan
+  getPlan: () =>
+    request('/api/v1/plan'),
 
-  updateDailyPlan: (date, content) =>
-    request('/api/v1/daily-plan', { method: 'PUT', body: JSON.stringify({ date, content }) }),
+  updatePlan: (content) =>
+    request('/api/v1/plan', { method: 'PUT', body: JSON.stringify({ content }) }),
 
   // Email
   getEmailStatus: () =>
