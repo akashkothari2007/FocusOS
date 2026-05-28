@@ -4,7 +4,7 @@ import sys
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from db import get_conn
+from db import get_conn, pool
 from routers import todo_router, session_router, job_router, doc_router, profile_router, habit_router, email_router, routine_router, plan_router
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from scheduler import run_email_scan
@@ -35,6 +35,10 @@ async def start_scheduler():
     scheduler.add_job(run_email_scan, "cron", hour=8, timezone="America/New_York")
     scheduler.add_job(run_email_scan, "cron", hour=18, timezone="America/New_York")
     scheduler.start()
+
+@app.on_event("shutdown")
+async def shutdown_pool():
+    pool.close()
 
 #-----Health Checks-----
 
