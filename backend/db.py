@@ -12,8 +12,10 @@ pool = ConnectionPool(
     DATABASE_URL,
     min_size=2,
     max_size=10,
-    max_idle=300,        # close idle connections after 5 min
-    reconnect_timeout=60, # keep trying to reconnect for 60s
+    max_idle=120,         # close idle connections after 2 min (before cloud infra kills them)
+    reconnect_timeout=5,  # fail fast on broken connections instead of blocking the pool
+    timeout=10,           # wait max 10s for a connection (fail fast, don't queue for 30s)
+    check=ConnectionPool.check_connection,  # ping before handing out — detects dead connections
     kwargs={"row_factory": dict_row},
 )
 
