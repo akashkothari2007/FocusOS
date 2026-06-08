@@ -48,11 +48,20 @@ def health():
 
 @app.get("/db")
 def db_check():
+    stats = pool.get_stats()
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT 1 AS one;")
             row = cur.fetchone()
-    return {"db": "connected", "result": row}
+    return {
+        "db": "connected",
+        "result": row,
+        "pool": {
+            "size": stats.get("pool_size", 0),
+            "available": stats.get("pool_available", 0),
+            "waiting": stats.get("requests_waiting", 0),
+        },
+    }
 
 
 
