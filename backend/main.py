@@ -4,7 +4,7 @@ import sys
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from db import get_conn, pool
+from db import get_conn
 from routers import todo_router, session_router, job_router, doc_router, profile_router, habit_router, email_router, routine_router, plan_router
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from scheduler import run_email_scan
@@ -36,10 +36,6 @@ async def start_scheduler():
     scheduler.add_job(run_email_scan, "cron", hour=18, timezone="America/New_York")
     scheduler.start()
 
-@app.on_event("shutdown")
-async def shutdown_pool():
-    pool.close()
-
 #-----Health Checks-----
 
 @app.get("/health")
@@ -48,20 +44,11 @@ def health():
 
 @app.get("/db")
 def db_check():
-    stats = pool.get_stats()
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT 1 AS one;")
             row = cur.fetchone()
-    return {
-        "db": "connected",
-        "result": row,
-        "pool": {
-            "size": stats.get("pool_size", 0),
-            "available": stats.get("pool_available", 0),
-            "waiting": stats.get("requests_waiting", 0),
-        },
-    }
+    return {"db": "connected", "result": row}
 
 
 
