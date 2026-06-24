@@ -1,10 +1,11 @@
 import logging
 import sys
+import time
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from db import get_conn
+from db import get_conn, get_stats as get_db_stats
 from routers import todo_router, session_router, job_router, doc_router, profile_router, habit_router, email_router, routine_router, plan_router
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from scheduler import run_email_scan
@@ -44,17 +45,38 @@ def health():
 
 @app.get("/db")
 def db_check():
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1 AS one;")
-            row = cur.fetchone()
-    return {"db": "connected", "result": row}
+    """Health check + rolling DB stats. Hit this from phone/laptop to inspect
+    recent connection lifecycles and error counts without digging through logs."""
+    t0 = time.time()
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 AS one;")
+                row = cur.fetchone()
+        ping_ms = round((time.time() - t0) * 1000)
+        return {
+            "db": "connected",
+            "ping_ms": ping_ms,
+            "result": row,
+            "stats": get_db_stats(),
+        }
+    except Exception as e:
+        ping_ms = round((time.time() - t0) * 1000)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "db": "error",
+                "ping_ms": ping_ms,
+                "exc_type": type(e).__name__,
+                "exc": str(e)[:300],
+                "stats": get_db_stats(),
+            },
+        )
 
 
 
 #-----Rate Limiting-----
 import os
-import time
 from collections import defaultdict
 
 # Track failed auth attempts per IP: {ip: [(timestamp, ...), ...]}
